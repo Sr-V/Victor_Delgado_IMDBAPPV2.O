@@ -1,0 +1,79 @@
+{
+  "project_info": {
+    "project_number": "990121098069",
+    "project_id": "delgadovictorimdbapp",
+    "storage_bucket": "delgadovictorimdbapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:990121098069:android:253db5a87f38f63eae4ddc",
+        "android_client_info": {
+          "package_name": "edu.pmdm.delgado_victorimdbapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "990121098069-44cljp8pkms5omai14sp65oo31pjfats.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.delgado_victorimdbapp",
+            "certificate_hash": "c87b015c45ebf763f504d619026e42030987e96c"
+          }
+        },
+        {
+          "client_id": "990121098069-ig7t77up1vo8n0deot7c70qdp6u8r9c7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.delgado_victorimdbapp",
+            "certificate_hash": "368dfc279f489e36564193dbae31fb69bfd757b9"
+          }
+        },
+        {
+          "client_id": "990121098069-k5ba202t3umpvv58phvqrgrji5k7dg5p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.delgado_victorimdbapp",
+            "certificate_hash": "fef1450d765df2cf93288011f1fa298bf7050cb7"
+          }
+        },
+        {
+          "client_id": "990121098069-nmonkij4ptihul0cddgealn50odlesl8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.delgado_victorimdbapp",
+            "certificate_hash": "08d99f2ace81f97ccdcacdab7e950d3b5bdd5953"
+          }
+        },
+        {
+          "client_id": "990121098069-q4mk92fe7jpleh74u7haha76hep408rm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.delgado_victorimdbapp",
+            "certificate_hash": "9b9520e80159316d50433b873e78fa7f8af57ef6"
+          }
+        },
+        {
+          "client_id": "990121098069-ev3ohh833e98pa3p4b77lbivq4m7cqe6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJaVg7yGPTkXpNh6k94KQSeLjYGeoQJZw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "990121098069-ev3ohh833e98pa3p4b77lbivq4m7cqe6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
