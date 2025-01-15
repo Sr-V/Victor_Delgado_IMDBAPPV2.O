@@ -26,7 +26,7 @@ public class IMDBApiService {
      */
     public String getTopMeterTitles() throws Exception {
         // Construir el endpoint para el top meter
-        String endpoint = "https://" + API_HOST + "/title/get-top-meter?topMeterTitlesType=ALL";
+        String endpoint = "https://" + API_HOST + "/title/get-top-meter?topMeterTitlesType=ALL&limit=10";
         return makeApiRequest(endpoint); // Realizar la solicitud al endpoint
     }
 

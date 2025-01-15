@@ -15,7 +15,11 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import database.DatabaseManager;
+import database.Movie;
 import database.SQLiteHelper;
 import edu.pmdm.delgado_victorimdbapp.MovieDetailsActivity;
 import edu.pmdm.delgado_victorimdbapp.R;
@@ -79,69 +83,60 @@ public class HomeFragment extends Fragment {
     private void loadTopMeterImages() {
         new Thread(() -> {
             try {
-                // Obtiene los títulos populares desde la API
+                // Obtén los 10 títulos más populares con todos los datos necesarios
                 String response = imdbApiService.getTopMeterTitles();
-                List<String> tconstList = parseTconsts(response);
 
-                for (String tconst : tconstList) {
-                    // Obtiene los detalles de cada película
-                    String detailsResponse = imdbApiService.getTitleDetails(tconst);
-                    String imageUrl = parseImageUrl(detailsResponse); // Extrae la URL de la imagen
-                    String title = parseTitle(detailsResponse); // Extrae el título de la película
+                // Procesa directamente los datos para obtener imagen y título
+                List<Movie> movies = parseMovieData(response);
 
-                    if (imageUrl != null && title != null) {
-                        // Agrega las imágenes al GridLayout en el hilo principal
-                        requireActivity().runOnUiThread(() -> addImageToGrid(imageUrl, tconst, title));
+                // Actualiza la UI en el hilo principal
+                requireActivity().runOnUiThread(() -> {
+                    for (Movie movie : movies) {
+                        addImageToGrid(movie.getCaratula(), movie.getId(), movie.getTitulo());
                     }
-                }
+                });
+
             } catch (Exception e) {
                 Log.e("IMDB_ERROR", "Error al cargar imágenes", e);
             }
         }).start();
     }
 
-    /**
-     * Extrae los IDs (tconst) de las películas del JSON de respuesta.
-     *
-     * @param response Respuesta JSON de IMDb.
-     * @return Lista de IDs de películas.
-     */
-    private List<String> parseTconsts(String response) {
-        List<String> tconsts = new ArrayList<>();
-        String regex = "tt\\d{7,8}"; // Expresión regular para IDs de películas
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-        java.util.regex.Matcher matcher = pattern.matcher(response);
-        while (matcher.find() && tconsts.size() < 10) { // Limita a las primeras 10 películas
-            tconsts.add(matcher.group());
+    private List<Movie> parseMovieData(String response) {
+        List<Movie> movies = new ArrayList<>();
+        try {
+            // Convertir la respuesta JSON en un objeto
+            JSONObject jsonResponse = new JSONObject(response);
+            JSONObject data = jsonResponse.getJSONObject("data");
+            JSONObject topMeterTitles = data.getJSONObject("topMeterTitles");
+            JSONArray edges = topMeterTitles.getJSONArray("edges");
+
+            // Recorrer cada película en la lista
+            for (int i = 0; i < edges.length(); i++) {
+                JSONObject node = edges.getJSONObject(i).getJSONObject("node");
+
+                // Extraer el ID
+                String id = node.getString("id");
+
+                // Extraer el título
+                JSONObject titleText = node.getJSONObject("titleText");
+                String title = titleText.getString("text");
+
+                // Extraer la URL de la imagen
+                JSONObject primaryImage = node.optJSONObject("primaryImage");
+                String imageUrl = primaryImage != null ? primaryImage.optString("url", null) : null;
+
+                // Validar que los datos necesarios existan
+                if (id != null && title != null && imageUrl != null) {
+                    movies.add(new Movie(id, imageUrl, title)); // Asignar la URL de la imagen a caratula
+                }
+            }
+        } catch (Exception e) {
+            Log.e("JSON_PARSE_ERROR", "Error al analizar los datos de las películas", e);
         }
-        return tconsts;
+        return movies;
     }
 
-    /**
-     * Extrae la URL de la imagen desde el JSON de detalles.
-     *
-     * @param response Respuesta JSON de IMDb.
-     * @return URL de la imagen o null si no se encuentra.
-     */
-    private String parseImageUrl(String response) {
-        String regex = "https://.*?\\.jpg"; // Expresión regular para URLs de imágenes
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-        java.util.regex.Matcher matcher = pattern.matcher(response);
-        return matcher.find() ? matcher.group() : null;
-    }
-
-    /**
-     * Extrae el título de la película desde el JSON de detalles.
-     *
-     * @param response Respuesta JSON de IMDb.
-     * @return Título de la película o null si no se encuentra.
-     */
-    private String parseTitle(String response) {
-        String regex = "\"titleText\":\\{\"text\":\"(.*?)\""; // Expresión regular para títulos
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-        java.util.regex.Matcher matcher = pattern.matcher(response);
-        return matcher.find() ? matcher.group(1) : null;
-    }
 
     /**
      * Agrega una imagen al GridLayout.
