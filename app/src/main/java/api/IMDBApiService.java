@@ -8,21 +8,27 @@ import java.net.URL;
 /**
  * Servicio para interactuar con la API de IMDb.
  * Proporciona métodos para obtener información sobre títulos de películas
- * y realizar solicitudes a los endpoints disponibles en IMDb.
+ * y manejar múltiples claves de API en caso de que se alcance el límite de solicitudes.
  */
 public class IMDBApiService {
 
-    // Clave de API proporcionada por IMDb para autenticación
-    private static final String API_KEY = "d7c42b5c70msha1a8f29b41380d3p1c344bjsn1a47f1b29511";
-
-    // Host de la API IMDb
-    private static final String API_HOST = "imdb-com.p.rapidapi.com";
+    private static final String API_HOST = "imdb-com.p.rapidapi.com"; // Host de la API IMDb
+    private RapidApiKeyManager apiKeyManager; // Gestor de claves API
+    private static final int HTTP_TOO_MANY_REQUESTS = 429; // Código HTTP 429: Demasiadas solicitudes
+    private static final int HTTP_BAD_GATEWAY = 502; // Código HTTP 502: Bad Gateway
 
     /**
-     * Realiza una solicitud para obtener los títulos del top meter de IMDb.
+     * Constructor de la clase. Inicializa el gestor de claves API.
+     */
+    public IMDBApiService() {
+        this.apiKeyManager = new RapidApiKeyManager();
+    }
+
+    /**
+     * Obtiene los títulos más populares del top meter de IMDb.
      *
      * @return Respuesta JSON en formato String que contiene los títulos más populares.
-     * @throws Exception En caso de error durante la solicitud (como errores de red o respuesta no válida).
+     * @throws Exception En caso de error durante la solicitud.
      */
     public String getTopMeterTitles() throws Exception {
         // Construir el endpoint para el top meter
@@ -31,11 +37,11 @@ public class IMDBApiService {
     }
 
     /**
-     * Realiza una solicitud para obtener los detalles de un título específico por su ID (tconst).
+     * Obtiene los detalles de un título específico por su ID (tconst).
      *
      * @param tconst ID único del título en IMDb (por ejemplo, "tt0120338").
      * @return Respuesta JSON en formato String que contiene los detalles del título.
-     * @throws Exception En caso de error durante la solicitud (como errores de red o respuesta no válida).
+     * @throws Exception En caso de error durante la solicitud.
      */
     public String getTitleDetails(String tconst) throws Exception {
         // Construir el endpoint para los detalles del título
@@ -45,44 +51,69 @@ public class IMDBApiService {
 
     /**
      * Realiza una solicitud GET genérica al endpoint especificado.
-     * Configura los encabezados necesarios para la autenticación con la API de IMDb.
+     * Cambia automáticamente de clave si se alcanza el límite de solicitudes.
      *
      * @param endpoint URL completa del endpoint de la API.
      * @return Respuesta JSON en formato String devuelta por el servidor.
      * @throws Exception En caso de error durante la solicitud (como errores de conexión o respuestas no exitosas).
      */
     private String makeApiRequest(String endpoint) throws Exception {
-        // Crear la URL y abrir una conexión HTTP
-        URL url = new URL(endpoint);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        int maxRetries = apiKeyManager.getApiKeysCount(); // Número máximo de intentos igual al número de claves disponibles
+        int attempt = 0; // Contador de intentos
 
-        // Configurar el método de solicitud como GET
-        connection.setRequestMethod("GET");
+        while (attempt < maxRetries) {
+            String apiKey = apiKeyManager.getCurrentKey(); // Obtener la clave API actual
+            attempt++; // Incrementar el contador de intentos
 
-        // Establecer las cabeceras necesarias para la autenticación con la API
-        connection.setRequestProperty("x-rapidapi-key", API_KEY); // Clave de la API
-        connection.setRequestProperty("x-rapidapi-host", API_HOST); // Host de la API
+            try {
+                // Crear la URL y abrir una conexión HTTP
+                URL url = new URL(endpoint);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-        // Obtener el código de respuesta del servidor
-        int responseCode = connection.getResponseCode();
+                // Configurar el método de solicitud como GET
+                connection.setRequestMethod("GET");
 
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            // Leer y procesar la respuesta si el código de respuesta es 200 (OK)
-            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            StringBuilder response = new StringBuilder();
-            String line;
+                // Establecer las cabeceras necesarias para la autenticación con la API
+                connection.setRequestProperty("x-rapidapi-key", apiKey); // Clave de la API
+                connection.setRequestProperty("x-rapidapi-host", API_HOST); // Host de la API
 
-            // Leer la respuesta línea por línea
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
+                // Obtener el código de respuesta del servidor
+                int responseCode = connection.getResponseCode();
+
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    // Leer y procesar la respuesta si el código de respuesta es 200 (OK)
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                    StringBuilder response = new StringBuilder();
+                    String line;
+
+                    // Leer la respuesta línea por línea
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+
+                    // Cerrar el lector y devolver la respuesta
+                    reader.close();
+                    return response.toString();
+                } else if (responseCode == HTTP_TOO_MANY_REQUESTS) {
+                    // Si se alcanza el límite de solicitudes, cambia a la siguiente clave
+                    apiKeyManager.switchToNextKey();
+                } else if (responseCode == HTTP_BAD_GATEWAY) {
+                    // Si el servidor devuelve un error 502, se decide reintentar con la misma clave
+                    System.err.println("Servidor remoto retornó 502. Reintentando...");
+                } else {
+                    // Lanzar una excepción si la respuesta no es exitosa
+                    throw new Exception("HTTP Error: " + responseCode);
+                }
+            } catch (Exception e) {
+                // Cambiar a la siguiente clave en caso de error
+                if (attempt >= maxRetries) {
+                    throw new Exception("Todas las claves han sido agotadas. Último error: " + e.getMessage());
+                } else {
+                    apiKeyManager.switchToNextKey(); // Cambiar a la siguiente clave
+                }
             }
-
-            // Cerrar el lector y devolver la respuesta
-            reader.close();
-            return response.toString();
-        } else {
-            // Lanzar una excepción si la respuesta no es exitosa
-            throw new Exception("HTTP Error: " + responseCode);
         }
+
+        throw new Exception("No se pudo completar la solicitud después de probar todas las claves.");
     }
 }
