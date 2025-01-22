@@ -202,7 +202,11 @@ public class HomeFragment extends Fragment {
             connection.setDoInput(true);
             connection.connect();
             InputStream input = connection.getInputStream();
-            return BitmapFactory.decodeStream(input);
+
+            // Configuración para reducir el tamaño
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 4; // Escala la imagen a 1/4 del tamaño original
+            return BitmapFactory.decodeStream(input, null, options);
         } catch (Exception e) {
             Log.e("IMAGE_ERROR", "Error al descargar la imagen", e);
             return null;
