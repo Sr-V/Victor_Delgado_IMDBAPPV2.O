@@ -200,8 +200,13 @@ public class MovieListActivity extends AppCompatActivity {
             connection.setDoInput(true);
             connection.connect();
 
+            // Configuración para reducir el tamaño de la imagen
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 4; // Escala la imagen a 1/4 del tamaño original
+            options.inPreferredConfig = Bitmap.Config.RGB_565; // Usa menos memoria por pixel
+
             try (InputStream input = connection.getInputStream()) {
-                return BitmapFactory.decodeStream(input);
+                return BitmapFactory.decodeStream(input, null, options);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error al descargar la imagen: " + imageUrl, e);
