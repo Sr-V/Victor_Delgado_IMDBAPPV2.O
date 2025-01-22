@@ -121,10 +121,17 @@ public class MainActivity extends AppCompatActivity {
             executorService.execute(() -> {
                 Bitmap bitmap = null;
                 try {
+                    // Descargar la imagen
                     InputStream inputStream = new java.net.URL(url).openStream();
-                    bitmap = BitmapFactory.decodeStream(inputStream);
 
-                    // Escalar la imagen
+                    // Escalar la imagen durante la decodificación
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inSampleSize = 4; // Escala la imagen a 1/4 del tamaño original
+                    options.inPreferredConfig = Bitmap.Config.RGB_565;
+
+                    bitmap = BitmapFactory.decodeStream(inputStream, null, options);
+
+                    // Redimensionar la imagen a un tamaño fijo
                     if (bitmap != null) {
                         int targetWidth = 150; // Ancho deseado
                         int targetHeight = 150; // Altura deseada

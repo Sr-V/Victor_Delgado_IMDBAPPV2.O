@@ -192,15 +192,27 @@ public class MovieDetailsActivity extends AppCompatActivity {
      * Descarga una imagen desde una URL y devuelve un Bitmap.
      */
     private Bitmap getBitmapFromURL(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            Log.e("MovieDetailsActivity", "URL de imagen vacía o nula");
+            return null;
+        }
+
         try {
             URL url = new URL(imageUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setDoInput(true);
             connection.connect();
-            InputStream input = connection.getInputStream();
-            return BitmapFactory.decodeStream(input);
+
+            // Configuración para reducir el tamaño de la imagen
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 4; // Escala la imagen a 1/4 del tamaño original
+            options.inPreferredConfig = Bitmap.Config.RGB_565; // Usa menos memoria por pixel
+
+            try (InputStream input = connection.getInputStream()) {
+                return BitmapFactory.decodeStream(input, null, options);
+            }
         } catch (Exception e) {
-            Log.e("MovieDetailsActivity", "Error al descargar la imagen", e);
+            Log.e("MovieDetailsActivity", "Error al descargar la imagen: " + imageUrl, e);
             return null;
         }
     }

@@ -317,13 +317,24 @@ public class GalleryFragment extends Fragment {
      * @return Imagen como Bitmap.
      */
     private Bitmap getBitmapFromURL(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            Log.e(TAG, "URL de imagen vacía o nula");
+            return null;
+        }
+
         try {
             java.net.URL url = new java.net.URL(imageUrl);
             java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
             connection.setDoInput(true);
             connection.connect();
+
+            // Configuración para reducir el tamaño de la imagen
+            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+            options.inSampleSize = 4; // Escala la imagen a 1/4 del tamaño original
+            options.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565; // Usa menos memoria por píxel
+
             try (java.io.InputStream input = connection.getInputStream()) {
-                return android.graphics.BitmapFactory.decodeStream(input);
+                return android.graphics.BitmapFactory.decodeStream(input, null, options);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error al obtener el Bitmap de la URL: " + imageUrl, e);
