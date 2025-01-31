@@ -1,5 +1,7 @@
 package edu.pmdm.delgado_victorimdbapp;
 
+import static androidx.core.content.ContentProviderCompat.requireContext;
+
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -13,6 +15,16 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.facebook.AccessToken;
+import com.facebook.login.LoginManager;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.firebase.auth.EmailAuthProvider;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.auth.UserInfo;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -33,7 +45,10 @@ public class MovieListActivity extends AppCompatActivity {
     private static final String TAG = "MovieListActivity";
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(4); // Ejecutores para tareas de fondo
-    private SQLiteHelper dbHelper; // Instancia de SQLiteHelper para manejar la base de datos
+    private SQLiteHelper dbHelper;  // Instancia de SQLiteHelper para manejar la base de datos
+
+    // *** Añadimos una variable para el userId ***
+    private String currentUserId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,7 +58,7 @@ public class MovieListActivity extends AppCompatActivity {
         RecyclerView recyclerView = createRecyclerView();
         setContentView(recyclerView);
 
-        // Inicializar SQLiteHelper
+        // Inicializar SQLiteHelper (una sola base de datos)
         initializeDatabaseHelper();
 
         // Obtener datos de películas desde el Intent
@@ -52,7 +67,9 @@ public class MovieListActivity extends AppCompatActivity {
         ArrayList<String> tconsts = getIntent().getStringArrayListExtra("TCONSTS");
 
         // Verificar que los datos no estén vacíos
-        if (posterUrls == null || posterUrls.isEmpty() || titles == null || tconsts == null) {
+        if (posterUrls == null || posterUrls.isEmpty() ||
+                titles == null || titles.isEmpty() ||
+                tconsts == null || tconsts.isEmpty()) {
             Toast.makeText(this, "No se encontraron películas", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -70,21 +87,27 @@ public class MovieListActivity extends AppCompatActivity {
     }
 
     /**
-     * Inicializa la base de datos SQLiteHelper.
+     * Inicializa el helper de la base de datos y registra el usuario actual.
      */
     private void initializeDatabaseHelper() {
-        try {
-            DatabaseManager.closeDatabase(); // Cerrar cualquier instancia previa
-            dbHelper = DatabaseManager.getInstance(this); // Inicializar base de datos
-        } catch (IllegalStateException e) {
-            Log.e(TAG, "Error al inicializar SQLiteHelper: " + e.getMessage());
+        // Inicializa la base de datos sin registrar al usuario
+        dbHelper = SQLiteHelper.getInstance(this);
+
+        // Obtener el usuario actual de FirebaseAuth
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            currentUserId = null;
+            Log.e(TAG, "Usuario no autenticado. No se encontró userId.");
+            return;
         }
+
+        // Obtener el userId del usuario autenticado
+        currentUserId = firebaseUser.getUid();
+        Log.d(TAG, "Base de datos lista para usar con el userId: " + currentUserId);
     }
 
     /**
      * Crea un RecyclerView configurado con un GridLayoutManager.
-     *
-     * @return RecyclerView configurado.
      */
     private RecyclerView createRecyclerView() {
         RecyclerView recyclerView = new RecyclerView(this);
@@ -102,10 +125,12 @@ public class MovieListActivity extends AppCompatActivity {
     private class MovieAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         private final ArrayList<String> posterUrls; // URLs de los pósters
-        private final ArrayList<String> titles; // Títulos de las películas
-        private final ArrayList<String> tconsts; // IDs de las películas
+        private final ArrayList<String> titles;     // Títulos de las películas
+        private final ArrayList<String> tconsts;    // IDs de las películas (e.g. "tt1234567")
 
-        public MovieAdapter(ArrayList<String> posterUrls, ArrayList<String> titles, ArrayList<String> tconsts) {
+        public MovieAdapter(ArrayList<String> posterUrls,
+                            ArrayList<String> titles,
+                            ArrayList<String> tconsts) {
             this.posterUrls = posterUrls;
             this.titles = titles;
             this.tconsts = tconsts;
@@ -123,6 +148,7 @@ public class MovieListActivity extends AppCompatActivity {
             params.setMargins(16, 16, 16, 16); // Márgenes alrededor del póster
             imageView.setLayoutParams(params);
             imageView.setScaleType(ImageView.ScaleType.CENTER_CROP); // Ajustar la imagen al centro
+
             return new RecyclerView.ViewHolder(imageView) {};
         }
 
@@ -133,7 +159,7 @@ public class MovieListActivity extends AppCompatActivity {
             String title = titles.get(position);
             String tconst = tconsts.get(position);
 
-            // Descargar y mostrar la imagen
+            // Descargar y mostrar la imagen en segundo plano
             executorService.execute(() -> {
                 Bitmap bitmap = getBitmapFromURL(imageUrl);
                 if (bitmap != null) {
@@ -158,15 +184,21 @@ public class MovieListActivity extends AppCompatActivity {
         private void setupImageViewListeners(ImageView imageView, String tconst, String imageUrl, String title) {
             // Agregar a favoritos al mantener presionado
             imageView.setOnLongClickListener(v -> {
-                if (dbHelper != null) {
-                    if (dbHelper.isMovieFavorite(title)) {
-                        Toast.makeText(imageView.getContext(), title + " ya está en favoritos", Toast.LENGTH_SHORT).show();
+                if (dbHelper != null && currentUserId != null) {
+                    // *** Usamos el método que requiere userId y movieId ***
+                    boolean isFav = dbHelper.isMovieFavorite(currentUserId, tconst);
+                    if (isFav) {
+                        Toast.makeText(imageView.getContext(),
+                                title + " ya está en favoritos",
+                                Toast.LENGTH_SHORT).show();
                     } else {
-                        dbHelper.addMovieToFavorites(tconst, imageUrl, title);
-                        Toast.makeText(imageView.getContext(), "Agregada a favoritos: " + title, Toast.LENGTH_SHORT).show();
+                        dbHelper.addMovieToFavorites(currentUserId, tconst, imageUrl, title);
+                        Toast.makeText(imageView.getContext(),
+                                "Agregada a favoritos: " + title,
+                                Toast.LENGTH_SHORT).show();
                     }
                 } else {
-                    Log.e(TAG, "SQLiteHelper no inicializado.");
+                    Log.e(TAG, "SQLiteHelper no inicializado o userId es null.");
                 }
                 return true;
             });
@@ -183,10 +215,11 @@ public class MovieListActivity extends AppCompatActivity {
     }
 
     /**
-     * Descarga una imagen desde una URL y la devuelve como un Bitmap.
+     * Descarga una imagen desde una URL y devuelve un Bitmap, escalando dinámicamente
+     * su tamaño para no usar demasiada memoria, pero manteniendo mejor calidad.
      *
-     * @param imageUrl URL de la imagen.
-     * @return Bitmap de la imagen o null en caso de error.
+     * @param imageUrl URL de la imagen a descargar.
+     * @return El Bitmap decodificado o null si ocurrió un error.
      */
     private Bitmap getBitmapFromURL(String imageUrl) {
         if (imageUrl == null || imageUrl.isEmpty()) {
@@ -194,23 +227,73 @@ public class MovieListActivity extends AppCompatActivity {
             return null;
         }
 
+        InputStream inputStream = null;
         try {
             URL url = new URL(imageUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setDoInput(true);
             connection.connect();
 
-            // Configuración para reducir el tamaño de la imagen
+            // ========== PRIMER PASE: LECTURA DE DIMENSIONES ==========
+            inputStream = connection.getInputStream();
             BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inSampleSize = 4; // Escala la imagen a 1/4 del tamaño original
-            options.inPreferredConfig = Bitmap.Config.RGB_565; // Usa menos memoria por pixel
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeStream(inputStream, null, options);
 
-            try (InputStream input = connection.getInputStream()) {
-                return BitmapFactory.decodeStream(input, null, options);
-            }
+            // Cerrar el InputStream y desconectar
+            inputStream.close();
+            connection.disconnect();
+
+            // ========== CALCULAR inSampleSize ==========
+            int reqWidth = 1024;
+            int reqHeight = 1024;
+            options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
+
+            // ========== SEGUNDO PASE: DECODIFICAR ==========
+            connection = (HttpURLConnection) new URL(imageUrl).openConnection();
+            connection.setDoInput(true);
+            connection.connect();
+            inputStream = connection.getInputStream();
+
+            options.inJustDecodeBounds = false;
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+
+            Bitmap scaledBitmap = BitmapFactory.decodeStream(inputStream, null, options);
+
+            inputStream.close();
+            connection.disconnect();
+
+            return scaledBitmap;
         } catch (Exception e) {
-            Log.e(TAG, "Error al descargar la imagen: " + imageUrl, e);
+            Log.e(TAG, "Error al descargar/decodificar la imagen: " + imageUrl, e);
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (Exception ignored) {}
+            }
             return null;
         }
+    }
+
+    /**
+     * Calcula un inSampleSize adecuado para decodificar la imagen a un tamaño manejable,
+     * basándose en las dimensiones deseadas (reqWidth, reqHeight) y las dimensiones
+     * originales (options.outWidth, options.outHeight).
+     */
+    private int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+
+            while ((halfHeight / inSampleSize) >= reqHeight
+                    && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+        return inSampleSize;
     }
 }
