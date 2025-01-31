@@ -48,6 +48,7 @@ dependencies {
     implementation(libs.playServicesAuth)
     implementation(libs.activity)
     implementation(libs.facebook.login)
+    implementation(libs.facebook.sdk)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
