@@ -29,16 +29,17 @@ import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import database.DatabaseManager;
-import database.SQLiteHelper;
-import database.User;
-import edu.pmdm.delgado_victorimdbapp.databinding.ActivityMainBinding;
-
 import com.google.firebase.auth.EmailAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.auth.UserInfo;
+
+import database.DatabaseManager;
+import database.SQLiteHelper;
+import database.User;
+import edu.pmdm.delgado_victorimdbapp.databinding.ActivityMainBinding;
+import database.FavoritesSync;  // Importar la clase de sincronización
 
 /**
  * MainActivity que maneja el menú principal y la navegación en la aplicación.
@@ -95,6 +96,17 @@ public class MainActivity extends AppCompatActivity {
         Button logoutButton = headerView.findViewById(R.id.logoutButton);
         if (logoutButton != null) {
             logoutButton.setOnClickListener(v -> logout());
+        }
+
+        // Si hay usuario autenticado, inicializar la sincronización de favoritos
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser != null) {
+            String userId = firebaseUser.getUid();
+            // Crear la instancia de FavoritesSync
+            // Instancia para sincronizar favoritos entre SQLite y la nube
+            FavoritesSync favoritesSync = new FavoritesSync(this, userId);
+            // Sincronizar los favoritos al iniciar la aplicación
+            favoritesSync.syncAtStartup();
         }
     }
 
@@ -171,7 +183,7 @@ public class MainActivity extends AppCompatActivity {
             imageView.setImageResource(R.mipmap.ic_launcher_round);
         }
 
-        // **Agregar usuario a la base de datos SQLite**
+        // Agregar usuario a la base de datos SQLite
         addUserToDatabase(userId, name, email, imageUrl);
     }
 
@@ -193,12 +205,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     /**
      * Descarga y muestra una imagen desde una URL en un ImageView, usando un ExecutorService
-     * para no bloquear la UI. Implementa un cálculo dinámico de inSampleSize para evitar
-     * decodificar imágenes enormes con demasiada resolución, pero manteniendo una calidad
-     * adecuada.
+     * para no bloquear la UI.
      *
      * @param imageView ImageView donde se mostrará la imagen.
      * @param url       URL de la imagen.
@@ -209,36 +218,32 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap bitmap = null;
                 InputStream inputStream = null;
                 try {
-                    // 1) Abrimos el stream de la imagen (solo una vez, así que lo haremos con reset si hace falta)
+                    // 1) Abrir el stream de la imagen
                     inputStream = new java.net.URL(url).openStream();
 
-                    // 2) Primer pase: solo para leer dimensiones (inJustDecodeBounds = true)
+                    // 2) Primer pase: solo leer dimensiones (inJustDecodeBounds = true)
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inJustDecodeBounds = true;
                     BitmapFactory.decodeStream(inputStream, null, options);
 
-                    // Cerrar y reabrir el stream porque ya se consumió en el primer decode
+                    // Cerrar y reabrir el stream
                     inputStream.close();
                     inputStream = new java.net.URL(url).openStream();
 
-                    // 3) Calcular inSampleSize deseado para, por ejemplo,
-                    //    limitar la imagen a un tamaño máximo (p. ej. 512x512) antes de escalar a 150x150 final.
+                    // 3) Calcular inSampleSize deseado para limitar el tamaño
                     int maxWidth = 512;
                     int maxHeight = 512;
                     options.inSampleSize = calculateInSampleSize(options, maxWidth, maxHeight);
 
-                    // Importante: ahora sí decodificamos la imagen completa
+                    // Decodificar la imagen completa
                     options.inJustDecodeBounds = false;
-                    // Mantener la profundidad de color para buena calidad:
                     options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-
-                    // 4) Decodificar la imagen con la escala calculada
                     bitmap = BitmapFactory.decodeStream(inputStream, null, options);
 
-                    // 5) Escalar la imagen a 150x150 si se decodificó correctamente
+                    // 4) Escalar la imagen a 150x150 si se decodificó correctamente
                     if (bitmap != null) {
-                        int targetWidth = 150;  // Ancho deseado final
-                        int targetHeight = 150; // Alto deseado final
+                        int targetWidth = 150;
+                        int targetHeight = 150;
                         bitmap = Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true);
                     }
                 } catch (Exception e) {
@@ -266,17 +271,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Calcula un inSampleSize adecuado para decodificar la imagen a un tamaño manejable,
-     * basándose en las dimensiones deseadas (reqWidth, reqHeight) y las dimensiones
-     * originales (options.outWidth, options.outHeight).
+     * Calcula un inSampleSize adecuado para decodificar la imagen a un tamaño manejable.
      *
      * @param options   Opciones del BitmapFactory con outWidth y outHeight ya cargados.
      * @param reqWidth  Ancho máximo deseado.
      * @param reqHeight Alto máximo deseado.
-     * @return Un valor de inSampleSize (1,2,4,...) para decodificar la imagen.
+     * @return Valor de inSampleSize.
      */
     private int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
-        // Dimensiones originales
         final int height = options.outHeight;
         final int width = options.outWidth;
         int inSampleSize = 1;
@@ -285,7 +287,6 @@ public class MainActivity extends AppCompatActivity {
             final int halfHeight = height / 2;
             final int halfWidth = width / 2;
 
-            // Aumentar inSampleSize mientras sea mayor que las dimensiones deseadas
             while ((halfHeight / inSampleSize) >= reqHeight
                     && (halfWidth / inSampleSize) >= reqWidth) {
                 inSampleSize *= 2;
@@ -298,24 +299,22 @@ public class MainActivity extends AppCompatActivity {
      * Cierra la sesión del usuario actual (Firebase, Google y Facebook) y redirige a LoginActivity.
      */
     private void logout() {
-        // 1) Cerrar sesión de Firebase (cubre también email/contraseña)
+        // 1) Cerrar sesión de Firebase (incluye email/contraseña)
         FirebaseAuth.getInstance().signOut();
 
-        // 2) Cerrar sesión de Google (si el usuario inició con Google).
-        //    Si no estaba logueado con Google, no hace nada.
-        mGoogleSignInClient.signOut().addOnCompleteListener(this, task -> {
-            Log.d("MainActivity", "Google Sign-Out completed (si estaba logueado)");
-        });
+        // 2) Cerrar sesión de Google (si estaba logueado)
+        mGoogleSignInClient.signOut().addOnCompleteListener(this, task ->
+                Log.d("MainActivity", "Google Sign-Out completed (si estaba logueado)"));
 
-        // 3) Cerrar sesión de Facebook (si el usuario inició con Facebook).
+        // 3) Cerrar sesión de Facebook (si estaba logueado)
         if (AccessToken.getCurrentAccessToken() != null) {
             LoginManager.getInstance().logOut();
             Log.d("MainActivity", "Facebook Sign-Out completed (si estaba logueado)");
         }
 
-        // 4) Redirigir al LoginActivity
+        // 4) Redirigir a LoginActivity
         Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK); // Eliminar MainActivity de la pila
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
     }
