@@ -16,6 +16,7 @@ activity = "1.9.3"
 playServicesAuth = "20.7.0"
 facebook-login = "15.0.1"
 facebook-sdk = "12.3.0"
+firebaseFirestore = "25.1.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -33,6 +34,7 @@ playServicesAuth = { group = "com.google.android.gms", name = "play-services-aut
 activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 facebook-login = { group = "com.facebook.android", name = "facebook-login", version.ref = "facebook-login" }
 facebook-sdk = { group = "com.facebook.android", name = "facebook-android-sdk", version.ref = "facebook-sdk" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
