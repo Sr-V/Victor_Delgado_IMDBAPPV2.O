@@ -14,6 +14,9 @@ import java.util.List;
 /**
  * SQLiteHelper maneja la base de datos local de la aplicación.
  * Contiene dos tablas: 'users' y 'favorites'.
+ *
+ * Se han agregado modificaciones para notificar cuando se añade o elimina
+ * una película, facilitando la sincronización entre la base de datos local y la nube.
  */
 public class SQLiteHelper extends SQLiteOpenHelper {
 
@@ -42,6 +45,24 @@ public class SQLiteHelper extends SQLiteOpenHelper {
     // Instancia singleton
     @SuppressLint("StaticFieldLeak")
     private static SQLiteHelper instance;
+
+    // Interfaz para notificar cambios en los favoritos
+    public interface OnFavoritesChangedListener {
+        void onFavoriteAdded(Movie movie);
+        void onFavoriteRemoved(String movieId);
+    }
+
+    // Variable para almacenar el listener (puede ser nulo si no se ha registrado)
+    private static OnFavoritesChangedListener favoritesChangedListener;
+
+    /**
+     * Establece el listener para cambios en los favoritos.
+     *
+     * @param listener Listener que recibirá las notificaciones.
+     */
+    public static void setOnFavoritesChangedListener(OnFavoritesChangedListener listener) {
+        favoritesChangedListener = listener;
+    }
 
     /**
      * Obtiene la instancia única (Singleton) de SQLiteHelper.
@@ -284,6 +305,7 @@ public class SQLiteHelper extends SQLiteOpenHelper {
 
     /**
      * Agrega una película a los favoritos de un usuario.
+     * Además de insertarla en la base de datos local, notifica el cambio para la sincronización.
      *
      * @param userId  ID del usuario
      * @param movieId ID de la película
@@ -316,12 +338,17 @@ public class SQLiteHelper extends SQLiteOpenHelper {
             return false;
         } else {
             Log.d("SQLiteHelper", "Película agregada a favoritos: " + movieId + " para el usuario " + userId);
+            // Notificar que se ha añadido una película (para sincronización)
+            if (favoritesChangedListener != null) {
+                favoritesChangedListener.onFavoriteAdded(new Movie(movieId, poster, title));
+            }
             return true;
         }
     }
 
     /**
      * Elimina una película de los favoritos de un usuario.
+     * Además de eliminarla de la base de datos local, notifica el cambio para la sincronización.
      *
      * @param userId  ID del usuario
      * @param movieId ID de la película
@@ -335,6 +362,10 @@ public class SQLiteHelper extends SQLiteOpenHelper {
                 new String[]{userId, movieId}
         );
         Log.d("SQLiteHelper", "Número de favoritos eliminados: " + rowsDeleted + " para el usuario " + userId);
+        // Notificar que se ha eliminado una película (para sincronización)
+        if (rowsDeleted > 0 && favoritesChangedListener != null) {
+            favoritesChangedListener.onFavoriteRemoved(movieId);
+        }
         return rowsDeleted;
     }
 
