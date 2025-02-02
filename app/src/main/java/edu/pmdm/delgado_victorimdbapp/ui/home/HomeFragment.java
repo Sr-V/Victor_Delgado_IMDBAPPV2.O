@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import api.IMDBApiService;
+import database.FavoritesSync; // Asegúrate de tener la clase FavoritesSync en el paquete correcto.
 import database.Movie;
 import database.SQLiteHelper;
 import edu.pmdm.delgado_victorimdbapp.MovieDetailsActivity;
@@ -45,6 +46,8 @@ public class HomeFragment extends Fragment {
     private SQLiteHelper dbHelper;              // Helper para la base de datos
 
     private String currentUserId;
+    // Instancia para sincronizar favoritos entre SQLite y la nube
+    private FavoritesSync favoritesSync;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -52,8 +55,34 @@ public class HomeFragment extends Fragment {
         gridLayout = root.findViewById(R.id.gridLayout);
         imdbApiService = new IMDBApiService(); // Inicializa el servicio IMDb
 
-        // Inicializa la base de datos
+        // Inicializa la base de datos y registra el usuario actual
         initializeDatabaseHelper();
+
+        // Si hay usuario autenticado, inicializa la sincronización
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser != null) {
+            currentUserId = firebaseUser.getUid();
+            // Crea la instancia de FavoritesSync
+            favoritesSync = new FavoritesSync(requireContext(), currentUserId);
+            // Registra el listener para que cada vez que se agregue o elimine un favorito se sincronice en la nube
+            SQLiteHelper.setOnFavoritesChangedListener(new SQLiteHelper.OnFavoritesChangedListener() {
+                @Override
+                public void onFavoriteAdded(Movie movie) {
+                    favoritesSync.addMovieToCloud(movie);
+                    Log.d(TAG, "Sincronizando adición en la nube: " + movie.getMovie_id());
+                }
+
+                @Override
+                public void onFavoriteRemoved(String movieId) {
+                    favoritesSync.removeMovieFromCloud(movieId);
+                    Log.d(TAG, "Sincronizando eliminación en la nube: " + movieId);
+                }
+            });
+            // Sincroniza al inicio
+            favoritesSync.syncAtStartup();
+        } else {
+            Log.e(TAG, "Usuario no autenticado. No se pudo inicializar la sincronización.");
+        }
 
         // Carga las películas populares
         loadTopMeterImages();
@@ -70,7 +99,7 @@ public class HomeFragment extends Fragment {
      * Inicializa el helper de la base de datos y registra el usuario actual.
      */
     private void initializeDatabaseHelper() {
-        // Inicializa la base de datos sin registrar al usuario
+        // Inicializa la base de datos
         dbHelper = SQLiteHelper.getInstance(requireContext());
 
         // Obtener el usuario actual de FirebaseAuth
@@ -106,7 +135,7 @@ public class HomeFragment extends Fragment {
                 });
 
             } catch (Exception e) {
-                Log.e("IMDB_ERROR", "Error al cargar imágenes", e);
+                Log.e(TAG, "Error al cargar imágenes", e);
             }
         }).start();
     }
@@ -116,20 +145,20 @@ public class HomeFragment extends Fragment {
         try {
             JSONObject jsonResponse = new JSONObject(response);
             JSONObject data = jsonResponse.optJSONObject("data");
-            if (data == null) return movies; // 🔥 Evita NullPointerException
+            if (data == null) return movies;
 
             JSONObject topMeterTitles = data.optJSONObject("topMeterTitles");
-            if (topMeterTitles == null) return movies; // 🔥 Evita NullPointerException
+            if (topMeterTitles == null) return movies;
 
             JSONArray edges = topMeterTitles.optJSONArray("edges");
-            if (edges == null) return movies; // 🔥 Evita NullPointerException
+            if (edges == null) return movies;
 
             for (int i = 0; i < edges.length(); i++) {
                 JSONObject nodeWrapper = edges.optJSONObject(i);
-                if (nodeWrapper == null) continue; // 🔥 Evita NullPointerException
+                if (nodeWrapper == null) continue;
 
                 JSONObject node = nodeWrapper.optJSONObject("node");
-                if (node == null) continue; // 🔥 Evita NullPointerException
+                if (node == null) continue;
 
                 String id = node.optString("id", "Sin ID");
 
@@ -144,7 +173,7 @@ public class HomeFragment extends Fragment {
                 }
             }
         } catch (Exception e) {
-            Log.e("JSON_PARSE_ERROR", "Error al analizar datos de películas", e);
+            Log.e(TAG, "Error al analizar datos de películas", e);
         }
         return movies;
     }
@@ -173,7 +202,7 @@ public class HomeFragment extends Fragment {
             }
         }).start();
 
-        // Listener para agregar a favoritos al MANTENER PRESIONADO
+        // Listener para agregar a favoritos al mantener presionado
         imageView.setOnLongClickListener(v -> {
             if (dbHelper != null && currentUserId != null) {
                 if (dbHelper.isMovieFavorite(currentUserId, movieId)) {
@@ -183,12 +212,12 @@ public class HomeFragment extends Fragment {
                     Toast.makeText(getContext(), "Agregada a favoritos: " + title, Toast.LENGTH_SHORT).show();
                 }
             } else {
-                Log.e("HomeFragment", "SQLiteHelper no inicializado o userId es null.");
+                Log.e(TAG, "SQLiteHelper no inicializado o userId es null.");
             }
             return true;
         });
 
-        // Listener para abrir la actividad de detalles al hacer CLIC
+        // Listener para abrir la actividad de detalles al hacer clic
         imageView.setOnClickListener(v -> {
             Intent intent = new Intent(getActivity(), MovieDetailsActivity.class);
             intent.putExtra("MOVIE_ID", movieId);
@@ -205,7 +234,7 @@ public class HomeFragment extends Fragment {
      */
     private Bitmap getBitmapFromURL(String imageUrl) {
         if (imageUrl == null || imageUrl.isEmpty()) {
-            Log.e("HomeFragment", "URL de imagen vacía o nula");
+            Log.e(TAG, "URL de imagen vacía o nula");
             return null;
         }
 
@@ -245,7 +274,7 @@ public class HomeFragment extends Fragment {
             return scaledBitmap;
 
         } catch (Exception e) {
-            Log.e("HomeFragment", "Error al descargar/decodificar imagen: " + imageUrl, e);
+            Log.e(TAG, "Error al descargar/decodificar imagen: " + imageUrl, e);
             if (inputStream != null) {
                 try {
                     inputStream.close();
