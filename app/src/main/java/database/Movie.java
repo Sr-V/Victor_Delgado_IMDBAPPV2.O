@@ -1,50 +1,28 @@
 package database;
 
 /**
- * Clase que representa una película almacenada en la base de datos.
+ * Clase que representa una película en la tabla 'favorites'.
  */
 public class Movie {
-    private final String id;       // ID único de la película (puede ser de IMDB o TMDB)
-    private final String caratula; // URL de la carátula de la película
-    private final String titulo;   // Título de la película
+    private final String movie_id;  // ID único de la película
+    private final String poster;    // URL de la carátula
+    private final String title;     // Título de la película
 
-    /**
-     * Constructor para crear una instancia de la película.
-     *
-     * @param id       ID único de la película.
-     * @param caratula URL de la carátula de la película.
-     * @param titulo   Título de la película.
-     */
-    public Movie(String id, String caratula, String titulo) {
-        this.id = id;
-        this.caratula = caratula;
-        this.titulo = titulo;
+    public Movie(String movie_id, String poster, String title) {
+        this.movie_id = movie_id;
+        this.poster = poster;
+        this.title = title;
     }
 
-    /**
-     * Obtiene el ID de la película.
-     *
-     * @return ID único de la película.
-     */
-    public String getId() {
-        return id;
+    public String getMovie_id() {
+        return movie_id;
     }
 
-    /**
-     * Obtiene la URL de la carátula de la película.
-     *
-     * @return URL de la carátula de la película.
-     */
-    public String getCaratula() {
-        return caratula;
+    public String getPoster() {
+        return poster;
     }
 
-    /**
-     * Obtiene el título de la película.
-     *
-     * @return Título de la película.
-     */
-    public String getTitulo() {
-        return titulo;
+    public String getTitle() {
+        return title;
     }
 }
