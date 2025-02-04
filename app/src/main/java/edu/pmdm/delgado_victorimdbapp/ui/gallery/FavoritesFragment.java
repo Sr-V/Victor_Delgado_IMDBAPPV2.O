@@ -50,9 +50,9 @@ import edu.pmdm.delgado_victorimdbapp.R;
  * Fragmento para mostrar y gestionar las películas favoritas.
  * Permite compartir datos en formato JSON y mostrar detalles de las películas.
  */
-public class GalleryFragment extends Fragment {
+public class FavoritesFragment extends Fragment {
 
-    private static final String TAG = "GalleryFragment"; // Etiqueta para logs de depuración
+    private static final String TAG = "FavoritesFragment"; // Etiqueta para logs de depuración
 
     private GridLayout gridLayout;       // Contenedor para mostrar las imágenes de las películas
     private SQLiteHelper dbHelper;       // Helper para la gestión de la base de datos
@@ -98,7 +98,7 @@ public class GalleryFragment extends Fragment {
             SQLiteHelper.setOnFavoritesChangedListener(new SQLiteHelper.OnFavoritesChangedListener() {
                 @Override
                 public void onFavoriteAdded(Movie movie) {
-                    // Aunque en GalleryFragment la acción principal es eliminar, se deja para completitud
+                    // Aunque en FavoritesFragment la acción principal es eliminar, se deja para completitud
                     favoritesSync.addMovieToCloud(movie);
                     Log.d(TAG, "Sincronizando adición en la nube: " + movie.getMovie_id());
                 }

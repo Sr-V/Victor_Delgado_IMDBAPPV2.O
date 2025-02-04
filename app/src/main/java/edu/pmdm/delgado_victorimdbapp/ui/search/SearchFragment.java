@@ -1,4 +1,4 @@
-package edu.pmdm.delgado_victorimdbapp.ui.slideshow;
+package edu.pmdm.delgado_victorimdbapp.ui.search;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -32,9 +32,9 @@ import edu.pmdm.delgado_victorimdbapp.R;
  * Fragmento para buscar películas por género y año.
  * Carga los géneros disponibles desde TMDB y realiza una búsqueda basada en los parámetros seleccionados.
  */
-public class SlideshowFragment extends Fragment {
+public class SearchFragment extends Fragment {
 
-    private static final String TAG = "SlideshowFragment"; // Etiqueta para logs de depuración
+    private static final String TAG = "SearchFragment"; // Etiqueta para logs de depuración
 
     private Spinner spinnerGenres; // Desplegable para seleccionar género
     private EditText editTextYear; // Campo para ingresar el año

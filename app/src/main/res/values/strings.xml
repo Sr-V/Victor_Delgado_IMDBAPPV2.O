@@ -6,7 +6,7 @@
     <string name="nav_header_subtitle">android.studio@android.com</string>
     <string name="nav_header_desc">Navigation header</string>
     <string name="action_settings">Settings</string>
-
+    <string name="action_edit_user">Edit User</string>
     <string name="sign_in_with_google_prompt">Por favor, inicia sesión con Google para acceder a esta cuenta.</string>
     <string name="sign_in_with_facebook_prompt">Por favor, inicia sesión con Facebook para acceder a esta cuenta.</string>
     <string name="authentication_failed">La autenticación falló. Por favor, inténtalo de nuevo.</string>
@@ -25,7 +25,7 @@
     <string name="facebook_client_token">9c1fc38522ef62d025ee2b2013fcf583</string>
     <string name="facebook_login_cancelled">Inicio de sesión con Facebook cancelado</string>
     <string name="facebook_login_failed">Error al iniciar sesión con Facebook</string>
-ç
+    ç
     <string name="no_sign_in_methods">No hay métodos de inicio de sesión asociados con este correo electrónico.</string>
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="google_sign_in_failed">Google sign-in failed.</string>
@@ -40,4 +40,18 @@
     <string name="register">Register</string>
     <string name="facebook_sign_in_cancelled">Facebook sign-in was cancelled.</string>
     <string name="facebook_sign_in_failed">Facebook sign-in failed. Please try again.</string>
+    <string name="name">Name</string>
+    <string name="enter_full_name">Enter full name</string>
+    <string name="insert_email">Email</string>
+    <string name="user_example_com">user@example.com</string>
+    <string name="address">Address</string>
+    <string name="address_not_set">Address not set</string>
+    <string name="seleccionar_direccion">SELECCIONAR DIRECCION</string>
+    <string name="select_a_country">Select a country</string>
+    <string name="phone">Phone</string>
+    <string name="enter_phone_number">Enter phone number</string>
+    <string name="select_image">SELECT IMAGE</string>
+    <string name="save">SAVE</string>
+    <string name="imagen_del_usuario">Imagen del usuario</string>
+    <string name="google_maps_key">AIzaSyAER7D-uvYpBOG3wZjz9z3AeGulqAci-OU</string>
 </resources>
