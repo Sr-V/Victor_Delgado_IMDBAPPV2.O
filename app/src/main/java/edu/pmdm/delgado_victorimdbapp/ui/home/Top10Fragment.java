@@ -38,9 +38,9 @@ import edu.pmdm.delgado_victorimdbapp.R;
  * Fragmento para mostrar las películas más populares desde IMDb.
  * Permite agregar películas a favoritos y acceder a detalles.
  */
-public class HomeFragment extends Fragment {
+public class Top10Fragment extends Fragment {
 
-    private static final String TAG = "HomeFragment";
+    private static final String TAG = "Top10Fragment";
     private GridLayout gridLayout;              // Contenedor para las imágenes de películas
     private IMDBApiService imdbApiService;      // Servicio de API de IMDb
     private SQLiteHelper dbHelper;              // Helper para la base de datos
