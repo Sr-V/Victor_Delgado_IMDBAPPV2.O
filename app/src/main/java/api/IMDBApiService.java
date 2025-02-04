@@ -16,6 +16,7 @@ public class IMDBApiService {
     private final RapidApiKeyManager apiKeyManager; // Gestor de claves API
     private static final int HTTP_TOO_MANY_REQUESTS = 429; // Código HTTP 429: Demasiadas solicitudes
     private static final int HTTP_BAD_GATEWAY = 502; // Código HTTP 502: Bad Gateway
+    private static final int HTTP_RETRY = -1; // Código especial para reintentar la solicitud
 
     /**
      * Constructor de la clase. Inicializa el gestor de claves API.
@@ -80,6 +81,7 @@ public class IMDBApiService {
                 // Obtener el código de respuesta del servidor
                 int responseCode = connection.getResponseCode();
 
+                // Si la respuesta es exitosa (HTTP 200)
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     // Leer y procesar la respuesta si el código de respuesta es 200 (OK)
                     BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
@@ -94,12 +96,18 @@ public class IMDBApiService {
                     // Cerrar el lector y devolver la respuesta
                     reader.close();
                     return response.toString();
-                } else if (responseCode == HTTP_TOO_MANY_REQUESTS) {
-                    // Si se alcanza el límite de solicitudes, cambia a la siguiente clave
-                    apiKeyManager.switchToNextKey();
-                } else if (responseCode == HTTP_BAD_GATEWAY) {
-                    // Si el servidor devuelve un error 502, se decide reintentar con la misma clave
+                }
+                // Si el código de respuesta es 429 (Demasiadas solicitudes), cambiamos de clave
+                else if (responseCode == HTTP_TOO_MANY_REQUESTS) {
+                    apiKeyManager.switchToNextKey(); // Cambiar a la siguiente clave API
+                }
+                // Si el código de respuesta es 502 (Bad Gateway), intentamos nuevamente con la misma clave
+                else if (responseCode == HTTP_BAD_GATEWAY) {
                     System.err.println("Servidor remoto retornó 502. Reintentando...");
+                }
+                // Si el código de respuesta es -1 (Reintento), volvemos a intentar la solicitud
+                else if (responseCode == HTTP_RETRY) {
+                    System.err.println("Respuesta con código -1. Reintentando...");
                 } else {
                     // Lanzar una excepción si la respuesta no es exitosa
                     throw new Exception("HTTP Error: " + responseCode);
