@@ -1,9 +1,13 @@
-package edu.pmdm.delgado_victorimdbapp;
+package utils;
 
 import android.app.Activity;
 import android.app.Application;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -14,103 +18,146 @@ import java.util.Locale;
 
 import database.SQLiteHelper;
 import database.User;
+import database.UsersSync;
 
 public class AppLifecycleManager extends Application implements Application.ActivityLifecycleCallbacks {
 
     private static final String TAG = "AppLifecycleManager";
     private int activityReferences = 0;
     private boolean isActivityChangingConfigurations = false;
+    private boolean isLoginTimeUpdated = false; // 🔹 Evita doble actualización del login_time
+    private String lastUserId = null; // 🔹 Último usuario autenticado
 
     @Override
     public void onCreate() {
         super.onCreate();
-        // Registrar el callback para conocer el ciclo de vida de las actividades
         registerActivityLifecycleCallbacks(this);
 
-        // Al iniciar la app, si hay un usuario autenticado, actualiza el campo login_time
+        // 🔹 Cargar el último usuario registrado en SharedPreferences
+        SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
+        lastUserId = prefs.getString("LAST_USER_ID", null);
+
+        // 🔹 Si la app fue cerrada a la fuerza, registrar logout del último usuario
+        if (lastUserId != null) {
+            registerForcedLogout(lastUserId);
+        }
+    }
+
+    @Override
+    public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle bundle) {}
+
+    @Override
+    public void onActivityStarted(@NonNull Activity activity) {
+        Log.d(TAG, activity.getLocalClassName() + " - onActivityStarted");
+
         FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
         if (firebaseUser != null) {
             String userId = firebaseUser.getUid();
-            String currentTime = getCurrentTime();
-            SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
-            User user = dbHelper.getUser(userId);
-            if (user != null) {
-                user.setLoginTime(currentTime);
-                // Se utiliza insertWithOnConflict con CONFLICT_REPLACE para actualizar el registro
-                dbHelper.addUser(user);
-                Log.d(TAG, "Login time updated at app start for user: " + userId);
+
+            // 🔹 Si el usuario ha cambiado o no se ha actualizado login_time, registrarlo
+            if (!userId.equals(lastUserId) || !isLoginTimeUpdated) {
+                updateLoginTime(userId);
+                lastUserId = userId;
+                isLoginTimeUpdated = true; // Marcar como actualizado
+
+                // 🔹 Guardar el nuevo usuario en SharedPreferences
+                SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
+                prefs.edit().putString("LAST_USER_ID", userId).apply();
             }
         }
-    }
 
-    @Override
-    public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
-        // No se requiere acción
-    }
-
-    @Override
-    public void onActivityStarted(Activity activity) {
         if (++activityReferences == 1 && !isActivityChangingConfigurations) {
-            // La app entra en primer plano
-            FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
-            if (firebaseUser != null) {
-                String userId = firebaseUser.getUid();
-                String currentTime = getCurrentTime();
-                SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
-                User user = dbHelper.getUser(userId);
-                if (user != null) {
-                    user.setLoginTime(currentTime);
-                    dbHelper.addUser(user);
-                    Log.d(TAG, "App entered foreground. Updated login time for user: " + userId);
-                }
-            }
+            Log.d(TAG, "App en primer plano.");
         }
     }
 
     @Override
-    public void onActivityResumed(Activity activity) {
-        // No se requiere acción
-    }
+    public void onActivityResumed(@NonNull Activity activity) {}
 
     @Override
-    public void onActivityPaused(Activity activity) {
-        // No se requiere acción
-    }
+    public void onActivityPaused(@NonNull Activity activity) {}
 
     @Override
-    public void onActivityStopped(Activity activity) {
+    public void onActivityStopped(@NonNull Activity activity) {
+        Log.d(TAG, activity.getLocalClassName() + " - onActivityStopped");
         isActivityChangingConfigurations = activity.isChangingConfigurations();
+
         if (--activityReferences == 0 && !isActivityChangingConfigurations) {
-            // La app pasa a segundo plano: actualiza el campo logout_time
             FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
             if (firebaseUser != null) {
-                String userId = firebaseUser.getUid();
-                String currentTime = getCurrentTime();
-                SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
-                User user = dbHelper.getUser(userId);
-                if (user != null) {
-                    user.setLogoutTime(currentTime);
-                    dbHelper.addUser(user);
-                    Log.d(TAG, "App entered background. Updated logout time for user: " + userId);
-                }
+                updateLogoutTime(firebaseUser.getUid());
             }
         }
     }
 
     @Override
-    public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
-        // No se requiere acción
-    }
+    public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle bundle) {}
 
     @Override
-    public void onActivityDestroyed(Activity activity) {
-        // No se requiere acción
+    public void onActivityDestroyed(@NonNull Activity activity) {}
+
+    /**
+     * Registra el login_time del usuario.
+     */
+    private void updateLoginTime(String userId) {
+        String currentTime = getCurrentTime();
+        SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+        User user = dbHelper.getUser(userId);
+
+        if (user == null) {
+            user = new User(userId, "", "", currentTime, "", "", "", "");
+            dbHelper.addUser(user);
+        } else {
+            user.setLoginTime(currentTime);
+            dbHelper.addUser(user);
+        }
+
+        Log.d(TAG, "Login registrado para usuario: " + userId);
+        new UsersSync(this, userId).syncActivityLog();
+    }
+
+    /**
+     * Registra el logout_time del usuario y permite volver a registrar logins.
+     */
+    private void updateLogoutTime(String userId) {
+        String currentTime = getCurrentTime();
+        SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+        User user = dbHelper.getUser(userId);
+
+        if (user != null) {
+            user.setLogoutTime(currentTime);
+            dbHelper.addUser(user);
+            Log.d(TAG, "Logout registrado para usuario: " + userId);
+            new UsersSync(this, userId).syncActivityLog();
+        }
+
+        // 🔹 Habilitar el booleano para permitir registrar logins nuevamente
+        isLoginTimeUpdated = false;
+    }
+
+    /**
+     * Si la app fue cerrada a la fuerza, registrar el logout del último usuario.
+     */
+    private void registerForcedLogout(String userId) {
+        Log.d(TAG, "Detectado cierre forzado. Registrando logout para " + userId);
+        updateLogoutTime(userId);
+    }
+
+    /**
+     * Restablece el estado de login para permitir nuevos logins tras un logout.
+     */
+    public void resetLoginState() {
+        isLoginTimeUpdated = false;
+        lastUserId = null;
+
+        SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
+        prefs.edit().remove("LAST_USER_ID").apply();
+
+        Log.d(TAG, "Estado de login restablecido. Se puede iniciar sesión nuevamente.");
     }
 
     /**
      * Obtiene la fecha y hora actual en formato "yyyy-MM-dd HH:mm:ss".
-     *
-     * @return La fecha y hora formateada.
      */
     private String getCurrentTime() {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
