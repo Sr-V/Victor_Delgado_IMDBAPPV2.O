@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "edu.pmdm.delgado_victorimdbapp"
-        minSdk = 30
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -50,6 +50,10 @@ dependencies {
     implementation(libs.facebook.login)
     implementation(libs.facebook.sdk)
     implementation(libs.firebase.firestore)
+    implementation(libs.country.code.picker)
+    implementation(libs.play.services.maps)
+    implementation(libs.play.services.places)
+    implementation(libs.libphonenumber)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
