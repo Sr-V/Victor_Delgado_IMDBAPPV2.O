@@ -17,6 +17,10 @@ playServicesAuth = "20.7.0"
 facebook-login = "15.0.1"
 facebook-sdk = "12.3.0"
 firebaseFirestore = "25.1.1"
+countryCodePicker = "2.5.4"
+playServicesMaps = "18.1.0"
+playServicesPlaces = "3.0.0"
+libphonenumber = "8.12.34"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -35,6 +39,10 @@ activity = { group = "androidx.activity", name = "activity", version.ref = "acti
 facebook-login = { group = "com.facebook.android", name = "facebook-login", version.ref = "facebook-login" }
 facebook-sdk = { group = "com.facebook.android", name = "facebook-android-sdk", version.ref = "facebook-sdk" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
+country-code-picker = { group = "com.hbb20", name = "ccp", version.ref = "countryCodePicker" }
+play-services-places = { group = "com.google.android.libraries.places", name = "places", version.ref = "playServicesPlaces" }
+play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
+libphonenumber = { module = "com.googlecode.libphonenumber:libphonenumber", version.ref = "libphonenumber" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
