@@ -5,8 +5,10 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuItem;  // Importar para manejar items de menú
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -26,6 +28,9 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -39,7 +44,9 @@ import database.DatabaseManager;
 import database.SQLiteHelper;
 import database.User;
 import edu.pmdm.delgado_victorimdbapp.databinding.ActivityMainBinding;
-import database.FavoritesSync;  // Importar la clase de sincronización
+import database.FavoritesSync;
+import database.UsersSync;  // Importar la clase para sincronización de logs
+import utils.AppLifecycleManager;
 
 /**
  * MainActivity que maneja el menú principal y la navegación en la aplicación.
@@ -47,8 +54,8 @@ import database.FavoritesSync;  // Importar la clase de sincronización
 public class MainActivity extends AppCompatActivity {
 
     private AppBarConfiguration mAppBarConfiguration; // Configuración de la barra de acción
-    private GoogleSignInClient mGoogleSignInClient;   // Cliente para Google Sign-In
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor(); // Servicio para ejecutar tareas en 2do plano
+    private GoogleSignInClient mGoogleSignInClient;      // Cliente para Google Sign-In
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor(); // Tareas en segundo plano
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,9 +75,7 @@ public class MainActivity extends AppCompatActivity {
                 R.id.nav_top10,
                 R.id.nav_gallery,
                 R.id.nav_slideshow
-        )
-                .setOpenableLayout(drawer)
-                .build();
+        ).setOpenableLayout(drawer).build();
 
         // Controlador para manejar la navegación entre fragmentos
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
@@ -89,31 +94,32 @@ public class MainActivity extends AppCompatActivity {
         TextView userEmailTextView = headerView.findViewById(R.id.userEmail);
         ImageView userImageView = headerView.findViewById(R.id.imageView);
 
-        // Mostrar los datos del usuario autenticado
-        displayUserData(userNameTextView, userEmailTextView, userImageView);
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser != null) {
+            String userId = firebaseUser.getUid();
+            UsersSync usersSync = new UsersSync(this, userId);
+
+            // 🔹 Sincronizar los datos del usuario desde Firestore a SQLite antes de mostrar la UI
+            usersSync.syncFromCloudToLocal(() -> {
+                // 🔹 Una vez completada la sincronización, cargar los datos del usuario en la UI
+                runOnUiThread(() -> displayUserData(userNameTextView, userEmailTextView, userImageView));
+
+                // 🔹 Inicializar la sincronización de favoritos
+                FavoritesSync favoritesSync = new FavoritesSync(this, userId);
+                favoritesSync.syncAtStartup();
+            });
+        }
 
         // Configuración del botón de cerrar sesión
         Button logoutButton = headerView.findViewById(R.id.logoutButton);
         if (logoutButton != null) {
             logoutButton.setOnClickListener(v -> logout());
         }
-
-        // Si hay usuario autenticado, inicializar la sincronización de favoritos
-        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
-        if (firebaseUser != null) {
-            String userId = firebaseUser.getUid();
-            // Crear la instancia de FavoritesSync
-            // Instancia para sincronizar favoritos entre SQLite y la nube
-            FavoritesSync favoritesSync = new FavoritesSync(this, userId);
-            // Sincronizar los favoritos al iniciar la aplicación
-            favoritesSync.syncAtStartup();
-        }
     }
 
     /**
      * Muestra los datos del usuario autenticado (nombre, correo o mensaje "Conectado con Facebook",
-     * foto de perfil o imagen por defecto), mostrando solamente lo correspondiente
-     * a la sesión iniciada.
+     * foto de perfil o imagen por defecto) y agrega o actualiza el usuario en la base de datos local.
      *
      * @param nameTextView  TextView para el nombre del usuario.
      * @param emailTextView TextView para el correo o estado del usuario.
@@ -131,77 +137,135 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String userId = firebaseUser.getUid();
-        String name = firebaseUser.getDisplayName();
-        String email = firebaseUser.getEmail();
-        String imageUrl = (firebaseUser.getPhotoUrl() != null) ? firebaseUser.getPhotoUrl().toString() : "";
+        SQLiteHelper dbHelper = DatabaseManager.getInstance(this);
+        User localUser = dbHelper.getUser(userId);
 
-        // Determinar el proveedor de autenticación
-        boolean isFacebookSignedIn = AccessToken.getCurrentAccessToken() != null
-                && !AccessToken.getCurrentAccessToken().isExpired();
+        String name = null;
+        String email = null;
+        String imageUrl = null;
 
-        if (isFacebookSignedIn) {
-            com.facebook.Profile profile = com.facebook.Profile.getCurrentProfile();
-            if (profile != null) {
-                name = profile.getName();
-                email = "Conectado con Facebook";
-                imageUrl = profile.getProfilePictureUri(150, 150).toString();
-            } else {
-                name = "Usuario de Facebook";
-                email = "Conectado con Facebook";
-            }
-        } else {
-            boolean isGoogleUser = false;
-            boolean isEmailPasswordUser = false;
+        if (localUser != null) {
+            // 🔹 Prioriza datos locales si están disponibles
+            name = localUser.getName();
+            email = localUser.getEmail();
+            imageUrl = localUser.getImage();
 
-            for (UserInfo userInfo : firebaseUser.getProviderData()) {
-                String providerId = userInfo.getProviderId();
-                if (GoogleAuthProvider.PROVIDER_ID.equals(providerId)) {
-                    isGoogleUser = true;
+            Log.d("MainActivity", "Cargando datos locales del usuario: " + userId);
+        }
+
+        if (name == null || name.isEmpty() || email == null || email.isEmpty()) {
+            // 🔹 Si no hay datos locales, usa los del proveedor de autenticación
+            Log.d("MainActivity", "No se encontraron datos locales. Usando datos del proveedor para: " + userId);
+
+            name = firebaseUser.getDisplayName();
+            email = firebaseUser.getEmail();
+            imageUrl = (firebaseUser.getPhotoUrl() != null) ? firebaseUser.getPhotoUrl().toString() : "";
+
+            // 🔹 Determinar el proveedor de autenticación
+            boolean isFacebookSignedIn = AccessToken.getCurrentAccessToken() != null
+                    && !AccessToken.getCurrentAccessToken().isExpired();
+
+            if (isFacebookSignedIn) {
+                com.facebook.Profile profile = com.facebook.Profile.getCurrentProfile();
+                if (profile != null) {
+                    name = profile.getName();
+                    email = "Conectado con Facebook";
+                    imageUrl = profile.getProfilePictureUri(150, 150).toString();
+                } else {
+                    name = "Usuario de Facebook";
+                    email = "Conectado con Facebook";
                 }
-                if (EmailAuthProvider.PROVIDER_ID.equals(providerId)) {
-                    isEmailPasswordUser = true;
-                }
-            }
-
-            if (isGoogleUser) {
-                name = (name != null && !name.isEmpty()) ? name : "Nombre no disponible";
-                email = (email != null && !email.isEmpty()) ? email : "Correo no disponible";
-            } else if (isEmailPasswordUser) {
-                name = "";
-                email = (email != null && !email.isEmpty()) ? email : "Correo no disponible";
             } else {
-                name = "Usuario sin proveedor reconocido";
+                boolean isGoogleUser = false;
+                boolean isEmailPasswordUser = false;
+
+                for (UserInfo userInfo : firebaseUser.getProviderData()) {
+                    String providerId = userInfo.getProviderId();
+                    if (GoogleAuthProvider.PROVIDER_ID.equals(providerId)) {
+                        isGoogleUser = true;
+                    }
+                    if (EmailAuthProvider.PROVIDER_ID.equals(providerId)) {
+                        isEmailPasswordUser = true;
+                    }
+                }
+
+                if (isGoogleUser) {
+                    name = (name != null && !name.isEmpty()) ? name : "Nombre no disponible";
+                    email = (email != null && !email.isEmpty()) ? email : "Correo no disponible";
+                } else if (isEmailPasswordUser) {
+                    name = (name != null && !name.isEmpty()) ? name : "";
+                    email = (email != null && !email.isEmpty()) ? email : "Correo no disponible";
+                } else {
+                    name = "Usuario sin proveedor reconocido";
+                }
             }
         }
 
-        // Mostrar datos en UI
+        // 🔹 Mostrar datos en la interfaz
         nameTextView.setText(name);
         emailTextView.setText(email);
-        if (!imageUrl.isEmpty()) {
-            loadImageFromUrl(imageView, imageUrl);
+
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            if (imageUrl.startsWith("http")) {
+                loadImageFromUrl(imageView, imageUrl);
+            } else {
+                decodeBase64Image(imageView, imageUrl);
+            }
         } else {
             imageView.setImageResource(R.mipmap.ic_launcher_round);
         }
 
-        // Agregar usuario a la base de datos SQLite
-        addUserToDatabase(userId, name, email, imageUrl);
+        // 🔹 Agregar o actualizar usuario en la base de datos local y sincronizar en la nube
+        addOrUpdateUserInDatabase(userId, name, email, imageUrl);
     }
 
-    private void addUserToDatabase(String userId, String name, String email, String imageUrl) {
+    private void decodeBase64Image(ImageView imageView, String base64Image) {
+        try {
+            byte[] decodedBytes = Base64.decode(base64Image, Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
+            imageView.setImageBitmap(bitmap);
+        } catch (IllegalArgumentException e) {
+            Log.e("MainActivity", "Error decodificando imagen Base64", e);
+            imageView.setImageResource(R.mipmap.ic_launcher_round);
+        }
+    }
+
+    /**
+     * Agrega el usuario a la base de datos local si no existe; si ya existe, actualiza su login_time.
+     * Luego sincroniza la información en la nube.
+     *
+     * @param userId   ID del usuario.
+     * @param name     Nombre del usuario.
+     * @param email    Correo o estado del usuario.
+     * @param imageUrl URL de la imagen de perfil.
+     */
+    private void addOrUpdateUserInDatabase(String userId, String name, String email, String imageUrl) {
         SQLiteHelper dbHelper = DatabaseManager.getInstance(this);
+        String currentTime = getCurrentTime();
 
-        // Verificar si el usuario ya existe en la base de datos
-        if (!dbHelper.doesUserExist(userId)) {
-            User user = new User(userId, name, email, "", "", "", "", imageUrl);
+        User user = dbHelper.getUser(userId);
+
+        if (user == null) {
+            // 🔹 Insertar usuario nuevo con login_time
+            user = new User(userId, name, email, currentTime, "", "", "", imageUrl);
             boolean success = dbHelper.addUser(user);
-
             if (success) {
                 Log.d("MainActivity", "Usuario agregado a la base de datos: " + userId);
             } else {
                 Log.e("MainActivity", "Error al agregar el usuario a la base de datos.");
             }
+        } else if (user.getLoginTime() == null || user.getLoginTime().isEmpty()) {
+            // 🔹 Solo actualizar login_time si está vacío
+            user.setLoginTime(currentTime);
+            dbHelper.addUser(user);
+            Log.d("MainActivity", "Usuario existente actualizado con login_time: " + userId);
         } else {
-            Log.d("MainActivity", "El usuario ya existe en la base de datos.");
+            Log.d("MainActivity", "El login_time ya estaba registrado. No se actualiza.");
+        }
+
+        // 🔹 Sincronizar solo si login_time se modificó
+        if (user.getLoginTime().equals(currentTime)) {
+            new UsersSync(this, userId).syncActivityLog();
         }
     }
 
@@ -218,10 +282,10 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap bitmap = null;
                 InputStream inputStream = null;
                 try {
-                    // 1) Abrir el stream de la imagen
+                    // Abrir el stream de la imagen
                     inputStream = new java.net.URL(url).openStream();
 
-                    // 2) Primer pase: solo leer dimensiones (inJustDecodeBounds = true)
+                    // Primer pase: solo leer dimensiones (inJustDecodeBounds = true)
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inJustDecodeBounds = true;
                     BitmapFactory.decodeStream(inputStream, null, options);
@@ -230,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
                     inputStream.close();
                     inputStream = new java.net.URL(url).openStream();
 
-                    // 3) Calcular inSampleSize deseado para limitar el tamaño
+                    // Calcular inSampleSize para limitar el tamaño
                     int maxWidth = 512;
                     int maxHeight = 512;
                     options.inSampleSize = calculateInSampleSize(options, maxWidth, maxHeight);
@@ -240,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
                     options.inPreferredConfig = Bitmap.Config.ARGB_8888;
                     bitmap = BitmapFactory.decodeStream(inputStream, null, options);
 
-                    // 4) Escalar la imagen a 150x150 si se decodificó correctamente
+                    // Escalar la imagen a 150x150 si se decodificó correctamente
                     if (bitmap != null) {
                         int targetWidth = 150;
                         int targetHeight = 150;
@@ -255,7 +319,6 @@ public class MainActivity extends AppCompatActivity {
                         } catch (Exception ignored) {}
                     }
                 }
-
                 Bitmap finalBitmap = bitmap;
                 runOnUiThread(() -> {
                     if (finalBitmap != null) {
@@ -282,13 +345,10 @@ public class MainActivity extends AppCompatActivity {
         final int height = options.outHeight;
         final int width = options.outWidth;
         int inSampleSize = 1;
-
         if (height > reqHeight || width > reqWidth) {
             final int halfHeight = height / 2;
             final int halfWidth = width / 2;
-
-            while ((halfHeight / inSampleSize) >= reqHeight
-                    && (halfWidth / inSampleSize) >= reqWidth) {
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
                 inSampleSize *= 2;
             }
         }
@@ -296,27 +356,75 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Cierra la sesión del usuario actual (Firebase, Google y Facebook) y redirige a LoginActivity.
+     * Cierra la sesión del usuario actual (Firebase, Google y Facebook), actualiza el logout_time
+     * local y sincroniza la información en la nube antes de redirigir a LoginActivity.
      */
     private void logout() {
-        // 1) Cerrar sesión de Firebase (incluye email/contraseña)
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser != null) {
+            String userId = firebaseUser.getUid();
+            String currentTime = getCurrentTime();
+            SQLiteHelper dbHelper = DatabaseManager.getInstance(this);
+            User user = dbHelper.getUser(userId);
+
+            if (user != null) {
+                user.setLogoutTime(currentTime);
+                dbHelper.addUser(user);
+                Log.d("MainActivity", "Usuario logout actualizado en la base local: " + userId);
+
+                // 🔹 Sincronizar en la nube antes de proceder con el logout
+                new UsersSync(this, userId)
+                        .syncActivityLog()
+                        .addOnSuccessListener(aVoid -> {
+                            resetLoginStateAndSignOut();
+                        })
+                        .addOnFailureListener(e -> {
+                            Log.e("MainActivity", "Error al sincronizar el activity_log", e);
+                            // 🔹 Incluso si falla la sincronización, se procede al logout
+                            resetLoginStateAndSignOut();
+                        });
+                return;
+            }
+        }
+        resetLoginStateAndSignOut();
+    }
+
+    /**
+     * Restablece el estado de login y cierra sesión en Firebase, Google y Facebook.
+     */
+    private void resetLoginStateAndSignOut() {
+        // 🔹 Restablecer estado para permitir otro login
+        AppLifecycleManager appLifecycleManager = (AppLifecycleManager) getApplication();
+        appLifecycleManager.resetLoginState();
+
+        // 🔹 Cerrar sesión en Firebase
         FirebaseAuth.getInstance().signOut();
 
-        // 2) Cerrar sesión de Google (si estaba logueado)
+        // 🔹 Cerrar sesión en Google
         mGoogleSignInClient.signOut().addOnCompleteListener(this, task ->
                 Log.d("MainActivity", "Google Sign-Out completed (si estaba logueado)"));
 
-        // 3) Cerrar sesión de Facebook (si estaba logueado)
+        // 🔹 Cerrar sesión en Facebook si está activo
         if (AccessToken.getCurrentAccessToken() != null) {
             LoginManager.getInstance().logOut();
             Log.d("MainActivity", "Facebook Sign-Out completed (si estaba logueado)");
         }
 
-        // 4) Redirigir a LoginActivity
+        // 🔹 Redirigir a la pantalla de Login
         Intent intent = new Intent(MainActivity.this, LoginActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+
+    /**
+     * Obtiene la fecha y hora actual en formato "yyyy-MM-dd HH:mm:ss".
+     *
+     * @return La fecha y hora formateada.
+     */
+    private String getCurrentTime() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        return sdf.format(new Date());
     }
 
     @Override
@@ -324,6 +432,24 @@ public class MainActivity extends AppCompatActivity {
         // Inflar el menú; agrega opciones a la barra de acción.
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
+    }
+
+    /**
+     * Maneja la selección de opciones del menú.
+     * Cuando se pulsa el item 'action_edit_user', se abre la actividad EditUserActivity.
+     */
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+
+        if (id == R.id.action_edit_user) {
+            // Abrir EditUserActivity
+            Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
+            startActivity(intent);
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
