@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import api.IMDBApiService;
-import database.FavoritesSync; // Asegúrate de tener la clase FavoritesSync en el paquete correcto.
+import database.FavoritesSync;
 import database.Movie;
 import database.SQLiteHelper;
 import edu.pmdm.delgado_victorimdbapp.MovieDetailsActivity;
