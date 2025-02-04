@@ -54,4 +54,8 @@
     <string name="save">SAVE</string>
     <string name="imagen_del_usuario">Imagen del usuario</string>
     <string name="google_maps_key">AIzaSyAER7D-uvYpBOG3wZjz9z3AeGulqAci-OU</string>
+    <string name="seleccione_una_direccion">Seleccione una dirección</string>
+    <string name="campo_de_direccion">Campo de dirección</string>
+    <string name="buscar_ubicacion">Buscar Ubicación</string>
+    <string name="confirmar_ubicacion">Confirmar Ubicación</string>
 </resources>

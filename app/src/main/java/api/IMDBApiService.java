@@ -13,7 +13,7 @@ import java.net.URL;
 public class IMDBApiService {
 
     private static final String API_HOST = "imdb-com.p.rapidapi.com"; // Host de la API IMDb
-    private RapidApiKeyManager apiKeyManager; // Gestor de claves API
+    private final RapidApiKeyManager apiKeyManager; // Gestor de claves API
     private static final int HTTP_TOO_MANY_REQUESTS = 429; // Código HTTP 429: Demasiadas solicitudes
     private static final int HTTP_BAD_GATEWAY = 502; // Código HTTP 502: Bad Gateway
 

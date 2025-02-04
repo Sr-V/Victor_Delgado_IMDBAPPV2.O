@@ -26,7 +26,6 @@ import java.util.concurrent.Executors;
 
 import database.FavoritesSync;
 import database.SQLiteHelper;
-import edu.pmdm.delgado_victorimdbapp.MovieDetailsActivity;
 
 /**
  * Actividad para mostrar una lista de películas en un RecyclerView con soporte para

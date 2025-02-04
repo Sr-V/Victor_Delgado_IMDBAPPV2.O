@@ -13,10 +13,6 @@ public class User {
     private String phone;
     private String image;
 
-    public User() {
-        // Constructor vacío
-    }
-
     public User(String userId, String name, String email, String loginTime,
                 String logoutTime, String address, String phone, String image) {
         this.userId = userId;
@@ -33,10 +29,6 @@ public class User {
 
     public String getUserId() {
         return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
     }
 
     public String getName() {

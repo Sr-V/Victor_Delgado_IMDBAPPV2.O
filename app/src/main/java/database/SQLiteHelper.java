@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * SQLiteHelper maneja la base de datos local de la aplicación.
  * Contiene dos tablas: 'users' y 'favorites'.
- *
+ * <p>
  * Se han agregado modificaciones para notificar cuando se añade o elimina
  * una película, facilitando la sincronización entre la base de datos local y la nube.
  */
@@ -147,12 +147,8 @@ public class SQLiteHelper extends SQLiteOpenHelper {
     @Override
     public void onConfigure(SQLiteDatabase db) {
         super.onConfigure(db);
-        db.setForeignKeyConstraintsEnabled(true); // 🔥 Habilitar claves foráneas
+        db.setForeignKeyConstraintsEnabled(true);
     }
-
-    // -----------------------------------------------------------
-    //                MÉTODOS PARA LA TABLA 'users'
-    // -----------------------------------------------------------
 
     /**
      * Verifica si un usuario existe en la tabla 'users'.
@@ -162,39 +158,22 @@ public class SQLiteHelper extends SQLiteOpenHelper {
      */
     public boolean doesUserExist(String userId) {
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = null;
-        try {
-            cursor = db.query(
-                    TABLE_USERS,
-                    new String[]{COLUMN_USER_ID},
-                    COLUMN_USER_ID + "=?",
-                    new String[]{userId},
-                    null,
-                    null,
-                    null
-            );
-            boolean exists = (cursor != null && cursor.moveToFirst());
-            return exists;
+        try (Cursor cursor = db.query(
+                TABLE_USERS,
+                new String[]{COLUMN_USER_ID},
+                COLUMN_USER_ID + "=?",
+                new String[]{userId},
+                null,
+                null,
+                null
+        )) {
+            return (cursor != null && cursor.moveToFirst());
         } catch (Exception e) {
             Log.e("SQLiteHelper", "Error al verificar existencia del usuario: " + userId, e);
             return false;
-        } finally {
-            if (cursor != null) cursor.close();
         }
     }
 
-    /**
-     * Actualiza solo los campos específicos (name, email, address, image, phone) de un usuario en la tabla 'users'.
-     * Además, sincroniza los cambios con Firestore si la actualización local es exitosa.
-     *
-     * @param userId        ID del usuario a actualizar
-     * @param newName       Nuevo nombre del usuario (puede ser null si no se desea actualizar)
-     * @param newEmail      Nuevo correo electrónico del usuario (puede ser null si no se desea actualizar)
-     * @param newAddress    Nueva dirección del usuario (puede ser null si no se desea actualizar)
-     * @param newImage      Nueva imagen del usuario (puede ser null si no se desea actualizar)
-     * @param newPhone      Nuevo teléfono del usuario (puede ser null si no se desea actualizar)
-     * @return True si la actualización fue exitosa, False en caso contrario
-     */
     /**
      * Actualiza solo los campos específicos (name, email, address, image, phone) de un usuario en la tabla 'users'.
      * Además, sincroniza los cambios con Firestore si la actualización local es exitosa.
@@ -235,9 +214,11 @@ public class SQLiteHelper extends SQLiteOpenHelper {
         }
 
         // Verificar si hay algo que actualizar (compatible con API < 30)
-        if (values.size() == 0) { // Usamos size() en lugar de isEmpty()
-            Log.i("SQLiteHelper", "No hay campos para actualizar para el usuario: " + userId);
-            return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (values.isEmpty()) { // Usamos size() en lugar de isEmpty()
+                Log.i("SQLiteHelper", "No hay campos para actualizar para el usuario: " + userId);
+                return false;
+            }
         }
 
         // Realizar la actualización en la base de datos local
@@ -338,23 +319,6 @@ public class SQLiteHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Elimina un usuario de la tabla 'users' por su user_id.
-     *
-     * @param userId ID del usuario
-     * @return Número de filas eliminadas
-     */
-    public int deleteUser(String userId) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        int rowsDeleted = db.delete(TABLE_USERS, COLUMN_USER_ID + "=?", new String[]{userId});
-        Log.d("SQLiteHelper", "Número de usuarios eliminados: " + rowsDeleted);
-        return rowsDeleted;
-    }
-
-    // -----------------------------------------------------------
-    //              MÉTODOS PARA LA TABLA 'favorites'
-    // -----------------------------------------------------------
-
-    /**
      * Verifica si una película está en los favoritos de un usuario.
      *
      * @param userId  ID del usuario
@@ -363,25 +327,20 @@ public class SQLiteHelper extends SQLiteOpenHelper {
      */
     public boolean isMovieFavorite(String userId, String movieId) {
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = null;
-        try {
-            cursor = db.query(
-                    TABLE_FAVORITES,
-                    new String[]{COLUMN_MOVIE_ID},
-                    COLUMN_USER_ID + "=? AND " + COLUMN_MOVIE_ID + "=?",
-                    new String[]{userId, movieId},
-                    null,
-                    null,
-                    null
-            );
+        try (Cursor cursor = db.query(
+                TABLE_FAVORITES,
+                new String[]{COLUMN_MOVIE_ID},
+                COLUMN_USER_ID + "=? AND " + COLUMN_MOVIE_ID + "=?",
+                new String[]{userId, movieId},
+                null,
+                null,
+                null
+        )) {
 
-            boolean exists = (cursor != null && cursor.moveToFirst());
-            return exists;
+            return (cursor != null && cursor.moveToFirst());
         } catch (Exception e) {
             Log.e("SQLiteHelper", "Error al verificar si la película es favorita: " + movieId + " para el usuario: " + userId, e);
             return false;
-        } finally {
-            if (cursor != null) cursor.close();
         }
     }
 
@@ -393,17 +352,16 @@ public class SQLiteHelper extends SQLiteOpenHelper {
      * @param movieId ID de la película
      * @param poster  URL del póster de la película
      * @param title   Título de la película
-     * @return True si la inserción fue exitosa, False en caso contrario
      */
-    public boolean addMovieToFavorites(String userId, String movieId, String poster, String title) {
+    public void addMovieToFavorites(String userId, String movieId, String poster, String title) {
         if (!doesUserExist(userId)) {
             Log.e("SQLiteHelper", "No se puede agregar a favoritos: El usuario " + userId + " no existe.");
-            return false;
+            return;
         }
 
         if (isMovieFavorite(userId, movieId)) {
             Log.i("SQLiteHelper", "La película " + movieId + " ya es favorita para el usuario " + userId);
-            return false;
+            return;
         }
 
         SQLiteDatabase db = this.getWritableDatabase();
@@ -417,14 +375,12 @@ public class SQLiteHelper extends SQLiteOpenHelper {
         long result = db.insert(TABLE_FAVORITES, null, values);
         if (result == -1) {
             Log.e("SQLiteHelper", "Error al agregar película a favoritos: " + movieId + " para el usuario " + userId);
-            return false;
         } else {
             Log.d("SQLiteHelper", "Película agregada a favoritos: " + movieId + " para el usuario " + userId);
             // Notificar que se ha añadido una película (para sincronización)
             if (favoritesChangedListener != null) {
                 favoritesChangedListener.onFavoriteAdded(new Movie(movieId, poster, title));
             }
-            return true;
         }
     }
 

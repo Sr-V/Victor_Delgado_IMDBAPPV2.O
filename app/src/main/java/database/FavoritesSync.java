@@ -131,36 +131,6 @@ public class FavoritesSync {
     }
 
     /**
-     * Añade una película a los favoritos, actualizando tanto la base de datos local
-     * como la nube.
-     *
-     * @param movie Objeto Movie a añadir a favoritos.
-     */
-    public void addMovieToFavorites(Movie movie) {
-        // Primero se añade localmente
-        boolean localAdded = dbHelper.addMovieToFavorites(userId, movie.getMovie_id(), movie.getPoster(), movie.getTitle());
-        if (localAdded) {
-            // Si se añadió en SQLite, se actualiza la nube
-            addMovieToCloud(movie);
-        }
-    }
-
-    /**
-     * Elimina una película de los favoritos, actualizando tanto la base de datos local
-     * como la nube.
-     *
-     * @param movieId ID de la película a eliminar.
-     */
-    public void removeMovieFromFavorites(String movieId) {
-        // Se elimina localmente
-        int localRemoved = dbHelper.removeMovieFromFavorites(userId, movieId);
-        if (localRemoved > 0) {
-            // Si se eliminó de SQLite, se elimina de la nube
-            removeMovieFromCloud(movieId);
-        }
-    }
-
-    /**
      * Método auxiliar para añadir una película a la nube.
      * <p>
      * Se añade un documento en:

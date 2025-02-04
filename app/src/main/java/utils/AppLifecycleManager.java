@@ -25,19 +25,19 @@ public class AppLifecycleManager extends Application implements Application.Acti
     private static final String TAG = "AppLifecycleManager";
     private int activityReferences = 0;
     private boolean isActivityChangingConfigurations = false;
-    private boolean isLoginTimeUpdated = false; // 🔹 Evita doble actualización del login_time
-    private String lastUserId = null; // 🔹 Último usuario autenticado
+    private boolean isLoginTimeUpdated = false; // Evita doble actualización del login_time
+    private String lastUserId = null; // Último usuario autenticado
 
     @Override
     public void onCreate() {
         super.onCreate();
         registerActivityLifecycleCallbacks(this);
 
-        // 🔹 Cargar el último usuario registrado en SharedPreferences
+        // Cargar el último usuario registrado en SharedPreferences
         SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
         lastUserId = prefs.getString("LAST_USER_ID", null);
 
-        // 🔹 Si la app fue cerrada a la fuerza, registrar logout del último usuario
+        // Si la app fue cerrada a la fuerza, registrar logout del último usuario
         if (lastUserId != null) {
             registerForcedLogout(lastUserId);
         }
@@ -131,7 +131,7 @@ public class AppLifecycleManager extends Application implements Application.Acti
             new UsersSync(this, userId).syncActivityLog();
         }
 
-        // 🔹 Habilitar el booleano para permitir registrar logins nuevamente
+        // Habilitar el booleano para permitir registrar logins nuevamente
         isLoginTimeUpdated = false;
     }
 

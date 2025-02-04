@@ -8,7 +8,7 @@ import android.os.Bundle;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
-import android.view.MenuItem;  // Importar para manejar items de menú
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -45,7 +45,7 @@ import database.SQLiteHelper;
 import database.User;
 import edu.pmdm.delgado_victorimdbapp.databinding.ActivityMainBinding;
 import database.FavoritesSync;
-import database.UsersSync;  // Importar la clase para sincronización de logs
+import database.UsersSync;
 import utils.AppLifecycleManager;
 
 /**
