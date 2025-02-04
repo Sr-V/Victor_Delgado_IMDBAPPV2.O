@@ -37,6 +37,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
+import java.util.Objects;
 
 import api.IMDBApiService;
 import api.TMDBApiService;
@@ -206,13 +207,13 @@ public class FavoritesFragment extends Fragment {
                     movieJson.put("id", movie.getMovie_id());
                     movieJson.put("title",
                             movieDetails.optJSONObject("titleText") != null
-                                    ? movieDetails.optJSONObject("titleText").optString("text", "N/A")
+                                    ? Objects.requireNonNull(movieDetails.optJSONObject("titleText")).optString("text", "N/A")
                                     : "N/A"
                     );
                     JSONObject plotObject = movieDetails.optJSONObject("plot");
                     movieJson.put("overview", (plotObject != null
                             && plotObject.optJSONObject("plotText") != null)
-                            ? plotObject.optJSONObject("plotText").optString("plainText", "N/A")
+                            ? Objects.requireNonNull(plotObject.optJSONObject("plotText")).optString("plainText", "N/A")
                             : "N/A"
                     );
                     JSONObject primaryImageObject = movieDetails.optJSONObject("primaryImage");
