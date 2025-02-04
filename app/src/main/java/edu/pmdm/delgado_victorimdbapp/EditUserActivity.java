@@ -364,8 +364,8 @@ public class EditUserActivity extends AppCompatActivity {
         String selectedCountryNameCode = countryCodePicker.getSelectedCountryNameCode();
         String fullPhone = "+" + countryCode + phoneNumber;
 
-        // Verificar si el número de teléfono es válido
-        if (!isValidPhoneNumber(fullPhone, selectedCountryNameCode)) {
+        // Verificar si el número de teléfono es válido solo si no está vacío
+        if (!phoneNumber.isEmpty() && !isValidPhoneNumber(fullPhone, selectedCountryNameCode)) {
             Toast.makeText(this, "Número de teléfono inválido para el país seleccionado", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -385,8 +385,10 @@ public class EditUserActivity extends AppCompatActivity {
         String base64Image = convertImageToBase64(userImageView);
 
         // Cifrar los datos sensibles
-        String encryptedPhone = keystoreManager.encrypt(phoneNumber);
-        String encryptedAddress = keystoreManager.encrypt(edtAddress.getText().toString().trim());
+        String encryptedPhone = phoneNumber.isEmpty() ? "" : keystoreManager.encrypt(phoneNumber); // Si el número está vacío, no cifrar
+        String encryptedAddress = edtAddress.getText().toString().trim().isEmpty() ? "" : keystoreManager.encrypt(edtAddress.getText().toString().trim()); // Si la dirección está vacía, no cifrar
+
+        // Verificar si hubo un error al cifrar
         if (encryptedPhone == null || encryptedAddress == null) {
             Toast.makeText(this, "Error al cifrar los datos. Inténtalo de nuevo.", Toast.LENGTH_SHORT).show();
             return;
@@ -406,8 +408,8 @@ public class EditUserActivity extends AppCompatActivity {
                     Map<String, Object> userData = new HashMap<>();
                     userData.put("name", newName);
                     userData.put("email", edtEmail.getText().toString().trim());
-                    userData.put("phone", encryptedPhone);
-                    userData.put("address", encryptedAddress);
+                    userData.put("phone", encryptedPhone); // Guardar vacío si es nulo
+                    userData.put("address", encryptedAddress); // Guardar vacío si es nulo
                     userData.put("image", base64Image);
 
                     FirebaseFirestore firestore = FirebaseFirestore.getInstance();
