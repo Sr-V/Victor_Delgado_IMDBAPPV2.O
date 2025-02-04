@@ -28,17 +28,4 @@ public class DatabaseManager {
         }
         return dbHelper;
     }
-
-    /**
-     * Cierra la base de datos si está abierta.
-     * No siempre es necesario, pues Android la cierra al terminar la app,
-     * pero puedes hacerlo si gustas.
-     */
-    public static synchronized void closeDatabase() {
-        if (dbHelper != null) {
-            dbHelper.close();
-            dbHelper = null;
-            Log.d(TAG, "Base de datos cerrada.");
-        }
-    }
 }
