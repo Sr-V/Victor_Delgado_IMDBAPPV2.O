@@ -97,25 +97,25 @@ public class KeyStoreManager {
     public String decrypt(String cipherTextBase64) {
         if (cipherTextBase64 == null || cipherTextBase64.isEmpty()) {
             Log.e("KeyStoreManager", "Intento de desencriptar datos vacíos o nulos.");
-            return ""; // 🔹 Devolver cadena vacía en lugar de lanzar excepción
+            return ""; // Devolver cadena vacía en lugar de lanzar excepción
         }
 
         try {
             byte[] combined = Base64.decode(cipherTextBase64, Base64.DEFAULT);
 
-            // 🔹 Validar si los datos son lo suficientemente largos (IV_SIZE + mínimo 1 byte de datos cifrados)
+            // Validar si los datos son lo suficientemente largos (IV_SIZE + mínimo 1 byte de datos cifrados)
             if (combined.length < IV_SIZE + 1) {
                 Log.e("KeyStoreManager", "Error: Datos encriptados inválidos o corruptos.");
-                return ""; // 🔹 Devolver cadena vacía si los datos son insuficientes
+                return ""; // Devolver cadena vacía si los datos son insuficientes
             }
 
             ByteBuffer byteBuffer = ByteBuffer.wrap(combined);
 
-            // 🔹 Extraer el IV
+            // Extraer el IV
             byte[] iv = new byte[IV_SIZE];
             byteBuffer.get(iv);  // Leer IV
 
-            // 🔹 Extraer el texto cifrado
+            // Extraer el texto cifrado
             byte[] cipherText = new byte[byteBuffer.remaining()];
             byteBuffer.get(cipherText);
 
@@ -128,7 +128,7 @@ public class KeyStoreManager {
 
         } catch (Exception e) {
             Log.e("KeyStoreManager", "Error desencriptando: ", e);
-            return ""; // 🔹 Devolver cadena vacía en caso de error para evitar crasheos
+            return ""; // Devolver cadena vacía en caso de error para evitar crasheos
         }
     }
 }
