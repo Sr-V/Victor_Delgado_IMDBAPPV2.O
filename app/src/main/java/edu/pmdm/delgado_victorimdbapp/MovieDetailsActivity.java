@@ -167,7 +167,6 @@ public class MovieDetailsActivity extends AppCompatActivity {
             connection.setDoInput(true);
             connection.connect();
 
-            // ========== PRIMER PASE: LECTURA DE DIMENSIONES ==========
             // (inJustDecodeBounds=true para solo obtener width/height)
             inputStream = connection.getInputStream();
             BitmapFactory.Options options = new BitmapFactory.Options();
@@ -178,14 +177,12 @@ public class MovieDetailsActivity extends AppCompatActivity {
             inputStream.close();
             connection.disconnect();
 
-            // ========== CALCULAR inSampleSize ==========
             // Por ejemplo, queremos que la imagen a decodificar no exceda 1024x1024
             // antes de un escalado final.
             int reqWidth = 1024;
             int reqHeight = 1024;
             options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
 
-            // ========== SEGUNDO PASE: DECODIFICAR ==========
             // Volvemos a abrir la conexión/stream
             connection = (HttpURLConnection) url.openConnection();
             connection.setDoInput(true);
