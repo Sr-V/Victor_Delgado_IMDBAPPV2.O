@@ -2,26 +2,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Indica que la aplicación no requiere el uso de hardware de telefonía -->
+    <!-- Otros uses-feature y permisos que ya tenías -->
     <uses-feature
         android:name="android.hardware.telephony"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
-    <!-- Permisos necesarios para la aplicación -->
-    <!-- Permiso para acceso a internet -->
+    <!-- Permisos necesarios -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Permiso para enviar SMS -->
     <uses-permission android:name="android.permission.SEND_SMS" />
-    <!-- Permisos relacionados con Bluetooth -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <!-- Permiso para acceder a los contactos -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Permisos para acceder a medios -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
-        android:name=".AppLifecycleManager"
+        android:name="utils.AppLifecycleManager"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -32,46 +38,61 @@
         android:theme="@style/Theme.Delgado_VictorIMDbAPP"
         tools:targetApi="31">
 
-        <!-- Actividad para los detalles de la película -->
+        <!-- Configuración del FileProvider -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="edu.pmdm.delgado_victorimdbapp.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Agregar las meta-data para Google Maps API y versión de Google Play Services -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyAER7D-uvYpBOG3wZjz9z3AeGulqAci-OU" />
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+
+        <!-- Declaración de actividades -->
+        <activity
+            android:name=".SelectAddressActivity"
+            android:exported="false" />
+        <activity
+            android:name=".EditUserActivity"
+            android:exported="false" />
         <activity
             android:name=".MovieDetailsActivity"
             android:exported="true"
-            android:screenOrientation="portrait"
             android:launchMode="singleTop"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity" /> <!-- Bloquea orientación en modo vertical -->
-
-        <!-- Actividad de inicio de sesión -->
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
         <activity
             android:name=".LoginActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity"> <!-- Bloquea orientación en modo vertical -->
+            tools:ignore="DiscouragedApi,LockedOrientationActivity">
             <intent-filter>
-                <!-- Define esta actividad como punto de entrada -->
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- Actividad principal -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Delgado_VictorIMDbAPP.NoActionBar"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity"> <!-- Bloquea orientación en modo vertical -->
-        </activity>
-
-        <!-- Actividad para mostrar la lista de películas -->
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
         <activity
             android:name=".MovieListActivity"
             android:screenOrientation="portrait"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity" /> <!-- Bloquea orientación en modo vertical -->
-
-
-        <activity android:name="com.facebook.FacebookActivity"
-            android:configChanges=
-                "keyboard|keyboardHidden|screenLayout|screenSize|orientation" />
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+        <activity
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="keyboard|keyboardHidden|screenLayout|screenSize|orientation" />
         <activity
             android:name="com.facebook.CustomTabActivity"
             android:exported="true">
@@ -82,8 +103,12 @@
                 <data android:scheme="@string/fb_login_protocol_scheme" />
             </intent-filter>
         </activity>
-        <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="@string/facebook_app_id"/>
-        <meta-data android:name="com.facebook.sdk.ClientToken" android:value="@string/facebook_client_token"/>
-    </application>
 
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id" />
+        <meta-data
+            android:name="com.facebook.sdk.ClientToken"
+            android:value="@string/facebook_client_token" />
+    </application>
 </manifest>
