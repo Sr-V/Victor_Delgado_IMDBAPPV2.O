@@ -41,51 +41,64 @@ public class UsersSync {
 
     /**
      * Sincroniza la información del registro de actividad (activity_log) desde la base de datos local (SQLite) a Firestore.
+     * Solo se procede si los datos obligatorios del usuario (name y email) están completos.
+     *
      * @return Task<Void> Tarea que representa el proceso de sincronización.
      */
     public Task<Void> syncActivityLog() {
-        DocumentReference userDocRef = firestore.collection("users").document(userId); // Referencia al documento del usuario en Firestore.
-        User user = dbHelper.getUser(userId); // Obtiene el usuario desde la base de datos local.
+        DocumentReference userDocRef = firestore.collection("users").document(userId);
+        User user = dbHelper.getUser(userId);
 
         if (user == null) {
-            return Tasks.forResult(null); // Si el usuario no existe, termina la tarea.
+            // Si no existe el usuario en SQLite, no se sincroniza nada.
+            return Tasks.forResult(null);
         }
 
-        final String localLoginTime = user.getLoginTime(); // Hora de inicio de sesión del usuario.
-        final String localLogoutTime = user.getLogoutTime(); // Hora de cierre de sesión del usuario.
+        // Verificar que los campos obligatorios estén completos
+        if (user.getName() == null || user.getName().isEmpty() ||
+                user.getEmail() == null || user.getEmail().isEmpty()) {
+            Log.e(TAG, "Datos incompletos del usuario. Sincronización abortada.");
+            // Puedes decidir retornar una tarea completada sin error o una con excepción
+            return Tasks.forResult(null);
+        }
 
-        TaskCompletionSource<Void> tcs = new TaskCompletionSource<>(); // Fuente de tarea para controlar el resultado de la tarea.
+        final String localLoginTime = user.getLoginTime();
+        final String localLogoutTime = user.getLogoutTime();
+
+        TaskCompletionSource<Void> tcs = new TaskCompletionSource<>();
 
         firestore.runTransaction((Transaction.Function<Void>) transaction -> {
-            DocumentSnapshot snapshot = transaction.get(userDocRef); // Obtiene el documento del usuario desde Firestore.
+            DocumentSnapshot snapshot = transaction.get(userDocRef);
             List<Map<String, Object>> activityLog = snapshot.contains("activity_log")
-                    ? (List<Map<String, Object>>) snapshot.get("activity_log") // Obtiene el registro de actividad si existe.
-                    : new ArrayList<>(); // Si no existe, crea una nueva lista.
+                    ? (List<Map<String, Object>>) snapshot.get("activity_log")
+                    : new ArrayList<>();
+            if (activityLog == null) {
+                activityLog = new ArrayList<>();
+            }
 
-            if (activityLog == null) activityLog = new ArrayList<>(); // Si el registro está vacío, inicializa la lista.
-
+            // Agregar nueva entrada de login si no existe ya el registro con el mismo login_time
             boolean addNewLogin = true;
             if (!activityLog.isEmpty()) {
-                Map<String, Object> lastEntry = activityLog.get(activityLog.size() - 1); // Obtiene la última entrada del registro.
+                Map<String, Object> lastEntry = activityLog.get(activityLog.size() - 1);
                 String lastLogin = (String) lastEntry.get("login_time");
                 if (lastLogin != null && lastLogin.equals(localLoginTime)) {
-                    addNewLogin = false; // Si el inicio de sesión local ya existe, no lo agrega nuevamente.
+                    addNewLogin = false;
                 }
             }
 
             if (addNewLogin && localLoginTime != null) {
                 Map<String, Object> newEntry = new HashMap<>();
                 newEntry.put("login_time", localLoginTime);
-                newEntry.put("logout_time", null); // Establece la hora de cierre como nula inicialmente.
-                activityLog.add(newEntry); // Agrega el nuevo registro al log de actividad.
+                newEntry.put("logout_time", null); // Se inicializa en nulo
+                activityLog.add(newEntry);
             }
 
-            // Si existen registros de actividad y hay una hora de cierre de sesión local, actualiza el último registro.
+            // Actualizar la entrada existente con el logout_time si corresponde
             if (!activityLog.isEmpty() && localLogoutTime != null && localLoginTime != null) {
                 Map<String, Object> lastEntry = activityLog.get(activityLog.size() - 1);
                 if (lastEntry.get("logout_time") == null) {
                     if (localLogoutTime.compareTo(localLoginTime) > 0) {
-                        lastEntry.put("logout_time", localLogoutTime); // Actualiza la hora de cierre si es válida.
+                        lastEntry.put("logout_time", localLogoutTime);
                     } else {
                         Log.d(TAG, "Logout time no es posterior al login time. No se actualiza.");
                     }
@@ -95,24 +108,24 @@ public class UsersSync {
             // Datos adicionales del usuario para sincronizar.
             Map<String, Object> extraData = new HashMap<>();
             extraData.put("email", user.getEmail());
-            extraData.put("name", user.getName() != null ? user.getName() : "desconocido");
+            extraData.put("name", user.getName());
             extraData.put("user_id", userId);
 
             Map<String, Object> updateData = new HashMap<>();
-            updateData.put("activity_log", activityLog); // Actualiza el registro de actividad.
-            updateData.putAll(extraData); // Agrega los datos adicionales.
+            updateData.put("activity_log", activityLog);
+            updateData.putAll(extraData);
 
-            transaction.set(userDocRef, updateData, SetOptions.merge()); // Realiza la transacción de actualización en Firestore.
+            transaction.set(userDocRef, updateData, SetOptions.merge());
             return null;
         }).addOnSuccessListener(aVoid -> {
             Log.d(TAG, "Se sincronizó el activity_log en Firestore.");
-            tcs.setResult(null); // Finaliza la tarea si la sincronización fue exitosa.
+            tcs.setResult(null);
         }).addOnFailureListener(e -> {
             Log.e(TAG, "Error al sincronizar activity_log.", e);
-            tcs.setException(e); // Finaliza la tarea con error si ocurre un fallo.
+            tcs.setException(e);
         });
 
-        return tcs.getTask(); // Devuelve la tarea.
+        return tcs.getTask();
     }
 
     /**

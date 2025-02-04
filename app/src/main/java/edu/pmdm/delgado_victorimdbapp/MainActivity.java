@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private GoogleSignInClient mGoogleSignInClient;      // Cliente para Google Sign-In
     private final ExecutorService executorService = Executors.newSingleThreadExecutor(); // Tareas en segundo plano
 
+    @SuppressLint("SetTextI18n")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -101,8 +102,19 @@ public class MainActivity extends AppCompatActivity {
 
             // 🔹 Sincronizar los datos del usuario desde Firestore a SQLite antes de mostrar la UI
             usersSync.syncFromCloudToLocal(() -> {
-                // 🔹 Una vez completada la sincronización, cargar los datos del usuario en la UI
-                runOnUiThread(() -> displayUserData(userNameTextView, userEmailTextView, userImageView));
+                // Verificar si ya existe el usuario en la base de datos local
+                SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+                User localUser = dbHelper.getUser(userId);
+
+                if (localUser == null) {
+                    // Si no hay datos, crear usuario localmente con los datos obtenidos del proveedor
+                    createUserIfNotExists(firebaseUser, userId, userNameTextView, userEmailTextView, userImageView);
+                } else {
+                    // Si ya existe, cargar los datos de la base de datos local
+                    runOnUiThread(() -> {
+                        displayUserData(localUser, userNameTextView, userEmailTextView, userImageView);
+                    });
+                }
 
                 // 🔹 Inicializar la sincronización de favoritos
                 FavoritesSync favoritesSync = new FavoritesSync(this, userId);
@@ -118,107 +130,196 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Muestra los datos del usuario autenticado (nombre, correo o mensaje "Conectado con Facebook",
-     * foto de perfil o imagen por defecto) y agrega o actualiza el usuario en la base de datos local.
+     * Crea el usuario localmente si no existe y sincroniza con la nube.
+     * Este método se ejecuta cuando no se encuentran datos locales ni en la nube.
      *
-     * @param nameTextView  TextView para el nombre del usuario.
-     * @param emailTextView TextView para el correo o estado del usuario.
-     * @param imageView     ImageView para mostrar la foto de perfil.
+     * @param firebaseUser El usuario de Firebase para obtener sus datos.
+     * @param userId El ID único del usuario.
+     * @param userNameTextView TextView donde se mostrará el nombre.
+     * @param userEmailTextView TextView donde se mostrará el correo.
+     * @param userImageView ImageView donde se mostrará la imagen de perfil.
      */
-    @SuppressLint("SetTextI18n")
-    private void displayUserData(TextView nameTextView, TextView emailTextView, ImageView imageView) {
-        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
-        if (firebaseUser == null) {
-            // No hay usuario autenticado
-            nameTextView.setText("Usuario no autenticado");
-            emailTextView.setText("");
-            imageView.setImageResource(R.mipmap.ic_launcher_round);
-            return;
+    private void createUserIfNotExists(FirebaseUser firebaseUser, String userId,
+                                       TextView userNameTextView, TextView userEmailTextView, ImageView userImageView) {
+        String name = "Anónimo"; // Valor predeterminado para el nombre
+        String email = firebaseUser.getEmail(); // El correo es siempre accesible
+        String imageUrl = null; // No asignamos imagen por defecto
+
+        // Obtener el proveedor de autenticación
+        String provider = firebaseUser.getProviderId();
+
+        switch (provider) {
+            case "google.com":
+                name = firebaseUser.getDisplayName(); // Nombre obtenido de Google
+                imageUrl = (firebaseUser.getPhotoUrl() != null)
+                        ? firebaseUser.getPhotoUrl().toString()
+                        : null; // Imagen de Google
+                break;
+            case "facebook.com":
+                name = firebaseUser.getDisplayName(); // Nombre obtenido de Facebook
+                imageUrl = (firebaseUser.getPhotoUrl() != null)
+                        ? firebaseUser.getPhotoUrl().toString()
+                        : null; // Imagen de Facebook
+                break;
+            case "password":
+                name = (firebaseUser.getDisplayName() != null)
+                        ? firebaseUser.getDisplayName()
+                        : "Anónimo"; // Si tiene nombre, usarlo, si no, usar "Anónimo"
+                break;
         }
 
-        String userId = firebaseUser.getUid();
-        SQLiteHelper dbHelper = DatabaseManager.getInstance(this);
-        User localUser = dbHelper.getUser(userId);
-
-        String name = null;
-        String email = null;
-        String imageUrl = null;
-
-        if (localUser != null) {
-            // 🔹 Prioriza datos locales si están disponibles
-            name = localUser.getName();
-            email = localUser.getEmail();
-            imageUrl = localUser.getImage();
-
-            Log.d("MainActivity", "Cargando datos locales del usuario: " + userId);
+        // Si el correo está vacío, asignar un valor predeterminado (esto nunca debería suceder con email/password)
+        if (email == null || email.isEmpty()) {
+            email = "Correo no disponible";
         }
 
-        if (name == null || name.isEmpty() || email == null || email.isEmpty()) {
-            // 🔹 Si no hay datos locales, usa los del proveedor de autenticación
-            Log.d("MainActivity", "No se encontraron datos locales. Usando datos del proveedor para: " + userId);
+        // Crear el usuario localmente
+        User newUser = new User(userId, name, email, getCurrentTime(), null, null, null, imageUrl);
 
-            name = firebaseUser.getDisplayName();
-            email = firebaseUser.getEmail();
-            imageUrl = (firebaseUser.getPhotoUrl() != null) ? firebaseUser.getPhotoUrl().toString() : "";
+        // Insertar el usuario en la base de datos local
+        SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+        boolean success = dbHelper.addUser(newUser);  // Añadir usuario en base local
 
-            // 🔹 Determinar el proveedor de autenticación
-            boolean isFacebookSignedIn = AccessToken.getCurrentAccessToken() != null
-                    && !AccessToken.getCurrentAccessToken().isExpired();
+        // Verificar si la inserción fue exitosa y sincronizar con la nube solo si los datos obligatorios están completos
+        if (success) {
+            if (newUser.getUserId() != null && !newUser.getUserId().isEmpty()
+                    && newUser.getName() != null && !newUser.getName().isEmpty()
+                    && newUser.getEmail() != null && !newUser.getEmail().isEmpty()) {
 
-            if (isFacebookSignedIn) {
-                com.facebook.Profile profile = com.facebook.Profile.getCurrentProfile();
-                if (profile != null) {
-                    name = profile.getName();
-                    email = "Conectado con Facebook";
-                    imageUrl = profile.getProfilePictureUri(150, 150).toString();
-                } else {
-                    name = "Usuario de Facebook";
-                    email = "Conectado con Facebook";
-                }
+                // Sincronizar los datos del usuario con Firestore después de la inserción exitosa
+                new UsersSync(this, userId)
+                        .syncSpecificFields() // Sincroniza los campos específicos con Firestore
+                        .addOnSuccessListener(aVoid -> Log.d("MainActivity", "Sincronización con la nube exitosa."))
+                        .addOnFailureListener(e -> Log.e("MainActivity", "Error al sincronizar con la nube.", e));
+
+                // Actualizar la UI en el hilo principal
+                runOnUiThread(() -> {
+                    displayUserData(newUser, userNameTextView, userEmailTextView, userImageView);
+                });
             } else {
-                boolean isGoogleUser = false;
-                boolean isEmailPasswordUser = false;
-
-                for (UserInfo userInfo : firebaseUser.getProviderData()) {
-                    String providerId = userInfo.getProviderId();
-                    if (GoogleAuthProvider.PROVIDER_ID.equals(providerId)) {
-                        isGoogleUser = true;
-                    }
-                    if (EmailAuthProvider.PROVIDER_ID.equals(providerId)) {
-                        isEmailPasswordUser = true;
-                    }
-                }
-
-                if (isGoogleUser) {
-                    name = (name != null && !name.isEmpty()) ? name : "Nombre no disponible";
-                    email = (email != null && !email.isEmpty()) ? email : "Correo no disponible";
-                } else if (isEmailPasswordUser) {
-                    name = (name != null && !name.isEmpty()) ? name : "";
-                    email = (email != null && !email.isEmpty()) ? email : "Correo no disponible";
-                } else {
-                    name = "Usuario sin proveedor reconocido";
-                }
-            }
-        }
-
-        // 🔹 Mostrar datos en la interfaz
-        nameTextView.setText(name);
-        emailTextView.setText(email);
-
-        if (imageUrl != null && !imageUrl.isEmpty()) {
-            if (imageUrl.startsWith("http")) {
-                loadImageFromUrl(imageView, imageUrl);
-            } else {
-                decodeBase64Image(imageView, imageUrl);
+                // Si faltan datos, registrar un error y NO sincronizar con la nube
+                Log.e("MainActivity", "Datos insuficientes para sincronizar. Se requiere user_id, name y email completos.");
+                runOnUiThread(() -> {
+                    // Incluso si no se sincroniza, se actualiza la UI con lo que se tiene localmente.
+                    displayUserData(newUser, userNameTextView, userEmailTextView, userImageView);
+                });
             }
         } else {
-            imageView.setImageResource(R.mipmap.ic_launcher_round);
+            Log.e("MainActivity", "Error al agregar el usuario a la base de datos.");
         }
-
-        // 🔹 Agregar o actualizar usuario en la base de datos local y sincronizar en la nube
-        addOrUpdateUserInDatabase(userId, name, email, imageUrl);
     }
 
+    /**
+     * Muestra los datos del usuario en la UI.
+     * Se utiliza después de crear o actualizar los datos del usuario en la base de datos local.
+     *
+     * @param user El usuario con los datos a mostrar.
+     * @param nameTextView El TextView para mostrar el nombre.
+     * @param emailTextView El TextView para mostrar el correo electrónico.
+     * @param imageView El ImageView para mostrar la imagen de perfil.
+     */
+    private void displayUserData(User user, TextView nameTextView, TextView emailTextView, ImageView imageView) {
+        // Primero, mostrar los datos existentes en la base de datos local
+        nameTextView.setText(user.getName());
+        emailTextView.setText(user.getEmail());
+
+        // Si el usuario tiene una imagen, mostrarla
+        if (user.getImage() != null && !user.getImage().isEmpty()) {
+            if (user.getImage().startsWith("http")) {
+                loadImageFromUrl(imageView, user.getImage());
+            } else {
+                decodeBase64Image(imageView, user.getImage()); // Usar Base64 si es necesario
+            }
+        } else {
+            imageView.setImageResource(R.mipmap.ic_launcher_round); // Imagen por defecto
+        }
+
+        // Verificar el proveedor para actualizar los campos si es necesario
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser != null) {
+            boolean isFacebookSignedIn = AccessToken.getCurrentAccessToken() != null && !AccessToken.getCurrentAccessToken().isExpired();
+            boolean isGoogleUser = false;
+            boolean isEmailPasswordUser = false;
+
+            for (UserInfo userInfo : firebaseUser.getProviderData()) {
+                String providerId = userInfo.getProviderId();
+                if (GoogleAuthProvider.PROVIDER_ID.equals(providerId)) {
+                    isGoogleUser = true;
+                }
+                if (EmailAuthProvider.PROVIDER_ID.equals(providerId)) {
+                    isEmailPasswordUser = true;
+                }
+            }
+
+            // Si es un usuario de Google, actualizar el nombre y correo si están vacíos
+            if (isGoogleUser && (user.getName().isEmpty() || user.getEmail().isEmpty())) {
+                String name = firebaseUser.getDisplayName();
+                String email = firebaseUser.getEmail();
+                String imageUrl = (firebaseUser.getPhotoUrl() != null) ? firebaseUser.getPhotoUrl().toString() : "";
+
+                user.setName((name != null && !name.isEmpty()) ? name : "Nombre no disponible");
+                user.setEmail((email != null && !email.isEmpty()) ? email : "Correo no disponible");
+                user.setImage(imageUrl);
+
+                // Actualizar los datos en la base de datos local
+                SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+                dbHelper.addUser(user);
+
+                // Refrescar la UI con los nuevos datos
+                nameTextView.setText(user.getName());
+                emailTextView.setText(user.getEmail());
+                if (user.getImage() != null && !user.getImage().isEmpty()) {
+                    loadImageFromUrl(imageView, user.getImage());
+                } else {
+                    imageView.setImageResource(R.mipmap.ic_launcher_round); // Imagen por defecto
+                }
+            }
+            // Si es un usuario de Facebook, actualizar nombre y correo
+            else if (isFacebookSignedIn && (user.getName().isEmpty() || user.getEmail().isEmpty())) {
+                String name = firebaseUser.getDisplayName();
+                user.setName(name != null ? name : "Usuario de Facebook");
+                user.setEmail("Conectado con Facebook");
+
+                // Actualizar los datos en la base de datos local
+                SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+                dbHelper.addUser(user);
+
+                // Refrescar la UI con los nuevos datos
+                nameTextView.setText(user.getName());
+                emailTextView.setText(user.getEmail());
+                if (user.getImage() != null && !user.getImage().isEmpty()) {
+                    loadImageFromUrl(imageView, user.getImage());
+                } else {
+                    imageView.setImageResource(R.mipmap.ic_launcher_round); // Imagen por defecto
+                }
+            }
+            // Si es un usuario con correo y contraseña, actualizar los campos si es necesario
+            else if (isEmailPasswordUser && (user.getName().isEmpty() || user.getEmail().isEmpty())) {
+                String name = firebaseUser.getDisplayName();
+                String email = firebaseUser.getEmail();
+
+                user.setName((name != null && !name.isEmpty()) ? name : "Nombre no disponible");
+                user.setEmail((email != null && !email.isEmpty()) ? email : "Correo no disponible");
+
+                // Actualizar los datos en la base de datos local
+                SQLiteHelper dbHelper = SQLiteHelper.getInstance(this);
+                dbHelper.addUser(user);
+
+                // Refrescar la UI con los nuevos datos
+                nameTextView.setText(user.getName());
+                emailTextView.setText(user.getEmail());
+                if (user.getImage() != null && !user.getImage().isEmpty()) {
+                    loadImageFromUrl(imageView, user.getImage());
+                } else {
+                    imageView.setImageResource(R.mipmap.ic_launcher_round); // Imagen por defecto
+                }
+            }
+        }
+    }
+
+    /**
+     * Decodifica una imagen en Base64 y la muestra en un ImageView.
+     */
     private void decodeBase64Image(ImageView imageView, String base64Image) {
         try {
             byte[] decodedBytes = Base64.decode(base64Image, Base64.DEFAULT);
@@ -226,46 +327,7 @@ public class MainActivity extends AppCompatActivity {
             imageView.setImageBitmap(bitmap);
         } catch (IllegalArgumentException e) {
             Log.e("MainActivity", "Error decodificando imagen Base64", e);
-            imageView.setImageResource(R.mipmap.ic_launcher_round);
-        }
-    }
-
-    /**
-     * Agrega el usuario a la base de datos local si no existe; si ya existe, actualiza su login_time.
-     * Luego sincroniza la información en la nube.
-     *
-     * @param userId   ID del usuario.
-     * @param name     Nombre del usuario.
-     * @param email    Correo o estado del usuario.
-     * @param imageUrl URL de la imagen de perfil.
-     */
-    private void addOrUpdateUserInDatabase(String userId, String name, String email, String imageUrl) {
-        SQLiteHelper dbHelper = DatabaseManager.getInstance(this);
-        String currentTime = getCurrentTime();
-
-        User user = dbHelper.getUser(userId);
-
-        if (user == null) {
-            // 🔹 Insertar usuario nuevo con login_time
-            user = new User(userId, name, email, currentTime, "", "", "", imageUrl);
-            boolean success = dbHelper.addUser(user);
-            if (success) {
-                Log.d("MainActivity", "Usuario agregado a la base de datos: " + userId);
-            } else {
-                Log.e("MainActivity", "Error al agregar el usuario a la base de datos.");
-            }
-        } else if (user.getLoginTime() == null || user.getLoginTime().isEmpty()) {
-            // 🔹 Solo actualizar login_time si está vacío
-            user.setLoginTime(currentTime);
-            dbHelper.addUser(user);
-            Log.d("MainActivity", "Usuario existente actualizado con login_time: " + userId);
-        } else {
-            Log.d("MainActivity", "El login_time ya estaba registrado. No se actualiza.");
-        }
-
-        // 🔹 Sincronizar solo si login_time se modificó
-        if (user.getLoginTime().equals(currentTime)) {
-            new UsersSync(this, userId).syncActivityLog();
+            imageView.setImageResource(R.mipmap.ic_launcher_round); // Imagen por defecto
         }
     }
 
