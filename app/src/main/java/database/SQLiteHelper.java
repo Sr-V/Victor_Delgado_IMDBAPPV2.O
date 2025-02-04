@@ -6,6 +6,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.os.Build;
 import android.util.Log;
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ public class SQLiteHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "app_database.db"; // Nombre de la base de datos
     private static final int DATABASE_VERSION = 1; // Versión de la base de datos
+    private final Context context;
 
     // Nombres de las tablas
     private static final String TABLE_USERS = "users";
@@ -84,6 +86,7 @@ public class SQLiteHelper extends SQLiteOpenHelper {
      */
     private SQLiteHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        this.context = context.getApplicationContext();
     }
 
     /**
@@ -177,6 +180,85 @@ public class SQLiteHelper extends SQLiteOpenHelper {
             return false;
         } finally {
             if (cursor != null) cursor.close();
+        }
+    }
+
+    /**
+     * Actualiza solo los campos específicos (name, email, address, image, phone) de un usuario en la tabla 'users'.
+     * Además, sincroniza los cambios con Firestore si la actualización local es exitosa.
+     *
+     * @param userId        ID del usuario a actualizar
+     * @param newName       Nuevo nombre del usuario (puede ser null si no se desea actualizar)
+     * @param newEmail      Nuevo correo electrónico del usuario (puede ser null si no se desea actualizar)
+     * @param newAddress    Nueva dirección del usuario (puede ser null si no se desea actualizar)
+     * @param newImage      Nueva imagen del usuario (puede ser null si no se desea actualizar)
+     * @param newPhone      Nuevo teléfono del usuario (puede ser null si no se desea actualizar)
+     * @return True si la actualización fue exitosa, False en caso contrario
+     */
+    /**
+     * Actualiza solo los campos específicos (name, email, address, image, phone) de un usuario en la tabla 'users'.
+     * Además, sincroniza los cambios con Firestore si la actualización local es exitosa.
+     *
+     * @param userId        ID del usuario a actualizar
+     * @param newName       Nuevo nombre del usuario (puede ser null si no se desea actualizar)
+     * @param newEmail      Nuevo correo electrónico del usuario (puede ser null si no se desea actualizar)
+     * @param newAddress    Nueva dirección del usuario (puede ser null si no se desea actualizar)
+     * @param newImage      Nueva imagen del usuario (puede ser null si no se desea actualizar)
+     * @param newPhone      Nuevo teléfono del usuario (puede ser null si no se desea actualizar)
+     * @return True si la actualización fue exitosa, False en caso contrario
+     */
+    public boolean updateUserSpecificFields(String userId, String newName, String newEmail,
+                                            String newAddress, String newImage, String newPhone) {
+        if (userId == null || userId.isEmpty()) {
+            Log.e("SQLiteHelper", "No se puede actualizar: El ID de usuario es nulo o vacío.");
+            return false;
+        }
+
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+
+        // Agregar solo los campos que no son nulos
+        if (newName != null) {
+            values.put(COLUMN_NAME, newName);
+        }
+        if (newEmail != null) {
+            values.put(COLUMN_EMAIL, newEmail);
+        }
+        if (newAddress != null) {
+            values.put(COLUMN_ADDRESS, newAddress);
+        }
+        if (newImage != null) {
+            values.put(COLUMN_IMAGE, newImage);
+        }
+        if (newPhone != null) {
+            values.put(COLUMN_PHONE, newPhone);
+        }
+
+        // Verificar si hay algo que actualizar (compatible con API < 30)
+        if (values.size() == 0) { // Usamos size() en lugar de isEmpty()
+            Log.i("SQLiteHelper", "No hay campos para actualizar para el usuario: " + userId);
+            return false;
+        }
+
+        // Realizar la actualización en la base de datos local
+        int rowsUpdated = db.update(TABLE_USERS, values, COLUMN_USER_ID + "=?", new String[]{userId});
+        if (rowsUpdated > 0) {
+            Log.d("SQLiteHelper", "Campos actualizados exitosamente para el usuario: " + userId);
+
+            // Sincronizar los cambios con Firestore
+            UsersSync usersSync = new UsersSync(context, userId); // Usa el contexto almacenado
+            usersSync.syncSpecificFields().addOnCompleteListener(task -> {
+                if (task.isSuccessful()) {
+                    Log.d("SQLiteHelper", "Sincronización exitosa con Firestore para el usuario: " + userId);
+                } else {
+                    Log.e("SQLiteHelper", "Error al sincronizar con Firestore para el usuario: " + userId, task.getException());
+                }
+            });
+
+            return true;
+        } else {
+            Log.e("SQLiteHelper", "Error al actualizar campos para el usuario: " + userId);
+            return false;
         }
     }
 
